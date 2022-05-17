@@ -1,0 +1,9 @@
+name: federlieb-build
+on: [push]
+jobs:
+  federlieb-build-job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v3
+      - run: brew install conan gcc@11

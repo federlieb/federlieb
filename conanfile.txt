@@ -1,0 +1,7 @@
+[requires]
+sqlite3/3.38.1
+boost/1.78.0
+
+[generators]
+cmake_paths
+cmake_find_package
