@@ -1,8 +1,5 @@
 name: federlieb-build
-on:
-  push:
-    tags:        
-      - '*'
+on: [push]
 jobs:
   build:
     runs-on: ubuntu-latest
