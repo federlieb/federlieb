@@ -11,4 +11,5 @@ jobs:
         with:
           runCmd: |
             .vscode/setup.sh
+            cmake -S/workspaces/federlieb -B/workspaces/federlieb/build -G Ninja
             cmake --build build --config Debug --target all --
