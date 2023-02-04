@@ -79,7 +79,7 @@ main(void)
 #if 1
 
   {
-    auto db = fl::db("/home/bjoern/cpp-xxx/MODERN.sqlite");
+    auto db = fl::db("MODERN.sqlite");
 
     vt_dominator_tree::register_module(db);
     vt_stmt::register_module(db);
@@ -428,7 +428,7 @@ strings_equal(char const* a, char const* b)
   return *a == *b && (*a == '\0' || strings_equal(a + 1, b + 1));
 }
 
-static_assert(strings_equal(__VERSION__, "11.2.0"));
+static_assert(strings_equal(__VERSION__, "11.3.0"));
 static_assert(__cplusplus == 202002L);
 
 #if 0

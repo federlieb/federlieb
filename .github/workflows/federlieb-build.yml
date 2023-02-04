@@ -1,9 +1,17 @@
 name: federlieb-build
-on: [push]
+on:
+  push:
+    tags:        
+      - '*'
 jobs:
-  federlieb-build-job:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out repository code
+      - name: Checkout (GitHub)
         uses: actions/checkout@v3
-      - run: brew install conan gcc@11
+      - name: Build and run dev container task
+        uses: devcontainers/ci@v0.2
+        with:
+          runCmd: |
+            .vscode/setup.sh
+            cmake --build build --config Debug --target all --

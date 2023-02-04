@@ -8,6 +8,7 @@ project(federlieb
 
 include(${CMAKE_BINARY_DIR}/conan_paths.cmake)
 
+find_package(fmt REQUIRED)
 find_package(SQLite3 REQUIRED)
 find_package(Boost REQUIRED COMPONENTS graph json)
 
@@ -25,6 +26,7 @@ include_directories(
 include_directories(
   ${SQLite3_INCLUDE_DIRS}
   ${Boost_INCLUDE_DIRS}
+  ${fmt_INCLUDE_DIRS}
 )
 
 if (CMAKE_COMPILER_IS_GNUCXX)
@@ -120,6 +122,7 @@ add_executable(main main.cxx
 
 target_link_libraries (main
   ${SQLite3_LIBRARIES}
+  ${fmt_LIBRARIES}
   ${Boost_LIBRARIES}
   federlieb_static
 )
@@ -141,6 +144,7 @@ add_executable(mini mini.cxx)
 
 target_link_libraries (mini
   ${SQLite3_LIBRARIES}
+  ${fmt_LIBRARIES}
   ${Boost_LIBRARIES}
 )
 
