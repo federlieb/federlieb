@@ -96,7 +96,7 @@ struct variant_graph
   {
     auto vertices_stmt = vtab->db().prepare(fl::detail::format(
       "SELECT * FROM {}",
-      vtab->kwarg("vertices").value_or("(SELECT 1,1 WHERE FALSE)")));
+      vtab->kwarg("vertices").value_or("(SELECT NULL WHERE FALSE)")));
 
     auto edges_stmt = vtab->db().prepare(
       fl::detail::format("SELECT * FROM {}", vtab->kwarg_or_throw("edges")));

@@ -9,6 +9,8 @@
 	},
 	"extensions": [
 		"ms-vscode.cmake-tools",
-		"ms-vscode.cpptools"
+		"ms-vscode.cpptools",
+		"ms-python.python",
+		"ms-python.black-formatter"
 	]
 }
