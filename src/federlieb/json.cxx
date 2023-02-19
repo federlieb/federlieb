@@ -221,6 +221,10 @@ fl::value::tag_invoke(const boost::json::value_to_tag<fl::value::variant>&,
       return fl::value::real{ theirs.get_double() };
     case boost::json::kind::string:
       return fl::value::text{ std::string(theirs.get_string()) };
+    case boost::json::kind::array:
+      return fl::value::text{ boost::json::serialize(theirs) };
+    case boost::json::kind::object:
+      return fl::value::text{ boost::json::serialize(theirs) };
     default:
       fl::error::raise("bad json type");
   }

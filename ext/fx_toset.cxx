@@ -103,3 +103,14 @@ fx_toset_contains::xFunc(const std::string haystack,
   return (array.end() !=
           std::ranges::find(array, boost::json::value_from(needle)));
 }
+
+
+void
+fx_object_set_agg::xStep(const std::string key, const fl::value::variant value) {
+  auto&& set = data_[key];
+  set.insert(value);
+}
+
+boost::json::object fx_object_set_agg::xFinal() {
+  return boost::json::value_from(data_).as_object();
+}

@@ -74,19 +74,26 @@ vt_partition_by::subquery(const fl::vtab::index_info& info,
                           vt_partition_by::cursor* cursor)
 {
 
-  auto sub_stmt = cursor->tmpdb_.prepare(R"SQL(
+  auto sub_sql = std::string(R"SQL(
 
     SELECT
       NULL, element, NULL, representative, round, NULL
     FROM
       tracking
-    WHERE
-      element = :element
 
   )SQL");
 
   auto element_eq = info.get("element", SQLITE_INDEX_CONSTRAINT_EQ);
-  sub_stmt.bind(":element", element_eq->current_value.value());
+
+  if (element_eq) {
+    sub_sql += " WHERE element = :element";
+  }
+
+  auto sub_stmt = cursor->tmpdb_.prepare(sub_sql);
+
+  if (element_eq) {
+    sub_stmt.bind(":element", element_eq->current_value.value());
+  }
 
   sub_stmt.execute();
 
@@ -134,6 +141,7 @@ vt_partition_by::project(const std::string& sql,
 {
 
   // TODO: ought to be cached for then_bys
+
   auto projection_stmt = db().prepare(fl::detail::format(
     R"SQL(
 
@@ -295,8 +303,8 @@ vt_partition_by::xBestIndex(fl::vtab::index_info& info)
   auto cursor_ptr_is = info.get("cursor_ptr", SQLITE_INDEX_CONSTRAINT_IS);
   auto element_eq = info.get("element", SQLITE_INDEX_CONSTRAINT_EQ);
 
-  if (cursor_ptr_is != nullptr && element_eq == nullptr) {
-    return false;
+  if (cursor_ptr_is != nullptr) {
+    // internal subquery
   }
 
   return true;

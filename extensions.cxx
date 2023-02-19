@@ -22,6 +22,9 @@ extern "C"
 #include "ext/vt_weak_components.hxx"
 #include "ext/vt_dijkstra_shortest_paths.hxx"
 
+#include "ext/vt_json_each.hxx"
+#include "ext/vt_script.hxx"
+
 extern "C"
 {
 #ifdef _WIN32
@@ -46,6 +49,8 @@ extern "C"
       vt_nameless::register_module(ours);
       vt_contraction::register_module(ours);
       vt_dijkstra_shortest_paths::register_module(ours);
+      vt_json_each::register_module(ours);
+      vt_script::register_module(ours);
 
       fx_toset::register_function(ours);
       fx_toset_agg::register_function(ours);
@@ -53,6 +58,7 @@ extern "C"
       fx_toset_intersection::register_function(ours);
       fx_toset_except::register_function(ours);
       fx_toset_contains::register_function(ours);
+      fx_object_set_agg::register_function(ours);
 
       fx_sha1::register_function(ours);
 

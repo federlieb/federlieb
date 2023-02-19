@@ -7,6 +7,7 @@
 #include <string>
 #include <variant>
 #include <vector>
+#include <array>
 
 #include <boost/json.hpp>
 
@@ -141,6 +142,9 @@ public:
   std::string table_name_;
   std::vector<fl::vtab::column> columns_;
 
+  int xBestIndexCallCount_ = 0;
+  std::array<index_info, 16> index_info_cache_;
+
   struct cursor_state
   {
     Vtab::cursor* cursor;
@@ -190,6 +194,7 @@ public:
     return std::ranges::subrange(argv_.begin() + 3, argv_.end());
   }
 
+#if 0
   auto kwarguments() const
   {
     using T = std::optional<std::pair<std::string, std::string>>;
@@ -201,6 +206,26 @@ public:
       if (std::regex_match(e, m, kweq)) {
         return std::make_optional(std::make_pair(m[1], m[2]));
       }
+      return std::nullopt;
+    };
+
+    return (arguments() | std::views::transform(split) |
+            std::views::filter([](auto&& e) { return e.has_value(); }) |
+            std::views::transform([](auto&& e) { return *e; }));
+  }
+#endif
+
+  auto kwarguments() const
+  {
+    using T = std::optional<std::pair<std::string, std::string>>;
+
+    auto split = [](auto&& e) -> T {
+      auto pos = e.find_first_of('=');
+
+      if (std::string::npos != pos) {
+        return std::make_optional(std::make_pair(e.substr(0, pos), e.substr(pos+1)));
+      }
+
       return std::nullopt;
     };
 
@@ -432,7 +457,7 @@ public:
           return SQLITE_CONSTRAINT;
         }
 
-        // p.vtab->log("D: BEFORE index_info\n{}", json(info).dump(2));
+        // p.vtab->log("D: BEFORE index_info\n{}", boost::json::serialize(boost::json::value_from(ours)));
 
         if constexpr (requires { p.vtab->xBestIndex(ours); }) {
           check = p.vtab->xBestIndex(ours);
@@ -442,9 +467,12 @@ public:
           return SQLITE_CONSTRAINT;
         }
 
-        // p.vtab->log("D: AFTER index_info\n{}", json(info).dump(2));
+        // p.vtab->log("D: AFTER index_info\n{}", boost::json::serialize(boost::json::value_from(ours)));
 
         index_info_export(ours, theirs);
+
+        theirs->idxNum = ++p.vtab->xBestIndexCallCount_;
+        p.vtab->index_info_cache_[ p.vtab->xBestIndexCallCount_ % p.vtab->index_info_cache_.size() ] = ours;
 
         std::string serialized =
           boost::json::serialize(boost::json::value_from(ours));
@@ -478,8 +506,14 @@ public:
         // look it up here, possibly only parsing the JSON when the
         // stored object has expired.
 
-        fl::vtab::index_info info = boost::json::value_to<fl::vtab::index_info>(
-          boost::json::parse(idxStr));
+        fl::vtab::index_info info;
+        
+        if ((idxNum - p.vtab->xBestIndexCallCount_) < p.vtab->index_info_cache_.size()) {
+          info = p.vtab->index_info_cache_[ idxNum % p.vtab->index_info_cache_.size() ];
+        } else {
+          info = boost::json::value_to<fl::vtab::index_info>(
+            boost::json::parse(idxStr));
+        }
 
         for (auto&& column : info.columns) {
           for (auto&& constraint : column.constraints) {

@@ -5,6 +5,15 @@
 
 namespace fl = ::federlieb;
 
+// TODO: Instead of encoding xBestIndex information as JSON in idxStr, make use
+// of the fact that SQLite considers a return value of SQLITE_CONSTRAINT from
+// xFilter a sign that xBestIndex needs to be run again (because the scheme may
+// have changed since preparing the statement) and does so for a configurable
+// number of times (SQLITE_MAX_SCHEMA_RETRY) when using `sqlite3_prepare_v2`.
+// We can then simply record the last couple of xBestIndex data sets and report
+// a counter value in idxNum as identifier. Return an error when the idxNum has
+// become invalid and hope SQLite will re-prepare the statement.
+
 std::string
 fl::vtab::to_sql(const fl::value::null& v)
 {

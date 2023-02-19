@@ -1,3 +1,6 @@
+#include <map>
+#include <set>
+
 #include "federlieb/fx.hxx"
 #include "federlieb/json.hxx"
 
@@ -68,4 +71,18 @@ public:
   static inline auto const direct_only = false;
 
   int xFunc(const std::string haystack, const fl::value::variant needle);
+};
+
+class fx_object_set_agg : public fl::fx::base<fx_object_set_agg>
+{
+public:
+  static inline auto const name = "fl_object_set_agg";
+  static inline auto const deterministic = true;
+  static inline auto const direct_only = false;
+
+  void xStep(const std::string key, const fl::value::variant value);
+  boost::json::object xFinal();
+
+protected:
+  std::map<std::string, std::set<fl::value::variant>> data_;
 };

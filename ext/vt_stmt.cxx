@@ -5,6 +5,81 @@
 
 namespace fl = ::federlieb;
 
+std::string
+to_where_fragment(const std::string& table_name,
+                                              const fl::vtab::index_info& info)
+{
+  std::stringstream ss;
+
+  auto quoted_table_name = fl::detail::quote_identifier(table_name);
+
+  for (auto column : info.columns) {
+    auto quoted_column_name = fl::detail::quote_identifier(
+      "c" + std::to_string(1 + column.column_index));
+
+    for (auto constraint : column.constraints) {
+
+      if (!constraint.usable) {
+        continue;
+      }
+
+      auto constraint_string = to_sql(constraint);
+
+      if (!constraint_string.empty() && column.column_index >= 0) {
+        if (ss.tellp() > 0) {
+          ss << " AND ";
+        }
+        ss << quoted_table_name << "." << quoted_column_name << " "
+           << constraint_string;
+      }
+    }
+  }
+
+  return ss.str();
+}
+
+std::string
+to_create_index(const std::string& table_name, const fl::vtab::index_info& info)
+{
+  std::stringstream ss;
+
+  auto quoted_table_name = fl::detail::quote_identifier(table_name);
+
+  std::list<std::string> columns;
+
+  for (auto column : info.columns) {
+    auto quoted_column_name = fl::detail::quote_identifier(
+      "c" + std::to_string(1 + column.column_index));
+
+    for (auto constraint : column.constraints) {
+
+      if (!constraint.usable) {
+        continue;
+      }
+
+      if (column.column_index < 0) {
+        continue;
+      }
+
+      columns.push_back(quoted_column_name);
+      break;
+
+    }
+  }
+
+  auto cols = boost::algorithm::join(columns, ",");
+
+  if (!cols.empty()) {
+    ss << "CREATE INDEX IF NOT EXISTS "
+      << fl::detail::quote_identifier("auto_index_" + quoted_table_name + "(" + cols + ")")
+      << " ON "
+      << quoted_table_name
+      << "(" << cols << ")";
+  }
+
+  return ss.str();
+}
+
 void
 vt_stmt::cache::change_meta_refcount(int64_t const id, int64_t const diff)
 {
@@ -178,6 +253,23 @@ vt_stmt::xBestIndex(fl::vtab::index_info& info)
   // By default the base class will request the values for all `ÈQ`
   // constraints for all columns marked required. We can use more
   // constraints when retrieving a result from the cache.
+
+  for (auto&& column : info.columns) {
+    for (auto&& constraint : column.constraints) {
+      if (constraint.usable && column.column_index >= 0) {
+        info.estimated_cost = 1e3;
+        if (!constraint.argv_index) {
+          constraint.argv_index = info.next_argv_index++;
+        }
+      }
+    }
+  }
+
+  auto create_index_sql = to_create_index("data", info);
+  if (!create_index_sql.empty()) {
+    cache_->db.prepare(create_index_sql).execute();
+  }
+
   return true;
 }
 
@@ -186,6 +278,7 @@ vt_stmt::xClose(cursor* cursor)
 {
   cache_->change_meta_refcount(cursor->id_, -cursor->used_);
 }
+
 
 fl::stmt
 vt_stmt::xFilter(const fl::vtab::index_info& info, cursor* cursor)
@@ -249,13 +342,23 @@ vt_stmt::xFilter(const fl::vtab::index_info& info, cursor* cursor)
 
   auto constrained_select = cache->select_sql;
 
-  // TODO: could add indices and/or constraints here
+#if 1
+  // TODO: move this to bestindex
+
+  auto constraints = to_where_fragment("data", info);
+
+  if (!constraints.empty()) {
+    constrained_select += " AND (" + constraints + ")";
+  }
+#endif
+
+  // log("D: vt_stmt xFilter called {}.\n", constrained_select);
 
   auto stmt = cache->db.prepare(constrained_select);
 
   stmt.bind(":id", insert_meta_row.id);
 
-  // log("D: Cache retrieval SQL:\n{}", stmt.expanded_sql());
+  // log("D: Cache retrieval SQL:\n{}\n(for {})\n{}\n", stmt.expanded_sql(), arguments().front());
 
   stmt.execute();
 

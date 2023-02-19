@@ -58,6 +58,15 @@ if (CMAKE_COMPILER_IS_GNUCXX)
   )
 endif()
 
+if (CMAKE_COMPILER_IS_GNUCXX)
+  add_compile_options(
+    -fdebug-prefix-map=/workspaces/federlieb/build/=./
+    -fconcepts-diagnostics-depth=4
+    -fdiagnostics-color=always
+  )
+endif()
+
+
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
   add_compile_options(
     -stdlib=libc++
@@ -109,6 +118,8 @@ set(FEDERLIEB_EXT_SOURCES_LIST
   ext/vt_nameless.cxx
   ext/vt_contraction.cxx
   ext/vt_dijkstra_shortest_paths.cxx
+  ext/vt_json_each.cxx
+  ext/vt_script.cxx
 
   ext/fx_toset.cxx
   ext/fx_kcrypto.cxx

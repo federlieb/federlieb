@@ -4,10 +4,10 @@
 #include "federlieb/federlieb.hxx"
 #include "vt_contraction.hxx"
 
-// TODO: make sure :vertex, :src, :dst are bound by name instead of
-// index, since application code might use them in the wrong order.
-
 namespace fl = ::federlieb;
+
+// TODO: Possibly use the pointer passing interface to make edge_if work on a
+// whole set of edges instead of executing the query repeatedly?
 
 void
 vt_contraction::cursor::import_edges(vt_contraction* vtab)
@@ -28,6 +28,8 @@ vt_contraction::cursor::import_edges(vt_contraction* vtab)
       dst ANY [BLOB] NOT NULL,
       contracted INT NOT NULL DEFAULT FALSE
     );
+
+    CREATE INDEX idx_history_src_dst ON history(src,dst);
 
     CREATE TRIGGER trigger_delete_edge
     AFTER DELETE ON edge
@@ -66,12 +68,20 @@ vt_contraction::cursor::import_edges(vt_contraction* vtab)
 void
 vt_contraction::cursor::contract_vertices(vt_contraction* vtab)
 {
+
+  auto vertex_if_sql = vtab->kwarg("vertex_if");
+
+  if (!vertex_if_sql) {
+    return;
+  }
+
   auto vertices_stmt =
     tmpdb_.prepare("SELECT src FROM edge UNION SELECT dst FROM edge");
+
   vertices_stmt.execute();
 
   auto vertex_if_stmt = vtab->db().prepare(
-    fl::detail::format("SELECT * FROM {}", vtab->kwarg_or_throw("vertex_if")));
+    fl::detail::format("SELECT * FROM {}", *vertex_if_sql));
 
   auto vertex_history_stmt = tmpdb_.prepare(R"SQL(
 
@@ -99,13 +109,18 @@ vt_contraction::cursor::contract_vertices(vt_contraction* vtab)
 
   auto vertex_delete_stmt = tmpdb_.prepare(R"SQL(
 
-    DELETE FROM edge WHERE :vertex IN (src, dst)
+    -- https://sqlite.org/forum/forumpost/2ed79a01ae
+    DELETE FROM edge WHERE :vertex = src OR :vertex = dst
 
   )SQL");
 
   for (auto&& row : vertices_stmt) {
     auto&& vertex = row.at(0);
-    vertex_if_stmt.execute(vertex);
+
+    vertex_if_stmt
+      .reset()
+      .bind(":vertex", vertex)
+      .execute();
 
     if (vertex_if_stmt.empty()) {
       continue;
@@ -124,8 +139,14 @@ vt_contraction::cursor::contract_vertices(vt_contraction* vtab)
 void
 vt_contraction::cursor::contract_edges(vt_contraction* vtab)
 {
+  auto edge_if_sql = vtab->kwarg("edge_if");
+
+  if (!edge_if_sql) {
+    return;
+  }
+
   auto edge_if_stmt = vtab->db().prepare(
-    fl::detail::format("SELECT * FROM {}", vtab->kwarg_or_throw("edge_if")));
+    fl::detail::format("SELECT * FROM {}", *edge_if_sql));
 
   auto edge_delete_stmt =
     tmpdb_.prepare("DELETE FROM edge WHERE src = :src AND dst = :dst");
@@ -179,8 +200,12 @@ vt_contraction::cursor::contract_edges(vt_contraction* vtab)
     todo.pop();
     seen.insert(current);
 
-    edge_if_stmt.execute(current.src, current.dst);
-
+    edge_if_stmt
+      .reset()
+      .bind(":src", current.src)
+      .bind(":dst", current.dst)
+      .execute();
+    
     auto contract =
       (!edge_if_stmt.empty() && int(edge_if_stmt.current_row().at(0)));
 
