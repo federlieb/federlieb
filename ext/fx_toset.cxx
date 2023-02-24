@@ -114,3 +114,27 @@ fx_object_set_agg::xStep(const std::string key, const fl::value::variant value) 
 boost::json::object fx_object_set_agg::xFinal() {
   return boost::json::value_from(data_).as_object();
 }
+
+// TODO: Error handling needs some thought
+
+std::optional<std::string>
+fx_stack_push::xFunc(const std::string& stack, fl::value::variant value)
+{
+  auto array = boost::json::parse(stack).as_array();
+  array.push_back(boost::json::value_from(value));
+  return boost::json::serialize(array);
+}
+
+std::optional<std::string>
+fx_stack_pop::xFunc(const std::string& stack) {
+  auto array = boost::json::parse(stack).as_array();
+  array.pop_back();
+  return boost::json::serialize(array);
+}
+
+std::optional<std::string>
+fx_stack_top::xFunc(const std::string& stack) {
+  auto array = boost::json::parse(stack).as_array();
+  auto value = array.back();
+  return boost::json::serialize(value);
+}

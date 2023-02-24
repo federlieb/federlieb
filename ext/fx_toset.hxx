@@ -86,3 +86,36 @@ public:
 protected:
   std::map<std::string, std::set<fl::value::variant>> data_;
 };
+
+class fx_stack_push : public fl::fx::base<fx_stack_push>
+{
+public:
+  static inline auto const name = "fl_stack_push";
+  static inline auto const deterministic = true;
+  static inline auto const direct_only = false;
+
+  std::optional<std::string> xFunc(const std::string&, fl::value::variant value);
+
+};
+
+class fx_stack_pop : public fl::fx::base<fx_stack_pop>
+{
+public:
+  static inline auto const name = "fl_stack_pop";
+  static inline auto const deterministic = true;
+  static inline auto const direct_only = false;
+
+  std::optional<std::string> xFunc(const std::string& array);
+
+};
+
+class fx_stack_top : public fl::fx::base<fx_stack_top>
+{
+public:
+  static inline auto const name = "fl_stack_top";
+  static inline auto const deterministic = true;
+  static inline auto const direct_only = false;
+
+  std::optional<std::string> xFunc(const std::string& array);
+
+};

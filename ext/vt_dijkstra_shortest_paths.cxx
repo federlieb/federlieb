@@ -51,6 +51,7 @@ vt_dijkstra_shortest_paths::xFilter(const fl::vtab::index_info& info,
 
   for (auto&& e : boost::make_iterator_range(boost::edges(g))) {
     auto w = g[e].at(weight_column_name);
+    // TODO: This could be friendlier
     weight_map.insert({ e, std::get<fl::value::real>(w).value });
   }
 

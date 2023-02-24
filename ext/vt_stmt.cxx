@@ -70,6 +70,9 @@ to_create_index(const std::string& table_name, const fl::vtab::index_info& info)
   auto cols = boost::algorithm::join(columns, ",");
 
   if (!cols.empty()) {
+    
+    cols = "id," + cols;
+
     ss << "CREATE INDEX IF NOT EXISTS "
       << fl::detail::quote_identifier("auto_index_" + quoted_table_name + "(" + cols + ")")
       << " ON "

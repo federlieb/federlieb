@@ -7,7 +7,10 @@
 namespace fl = ::federlieb;
 
 // TODO: Possibly use the pointer passing interface to make edge_if work on a
-// whole set of edges instead of executing the query repeatedly?
+// whole set of edges instead of executing the query repeatedly? Similarily,
+// There is probably no reason to have a vertex_if parameter, which vertices
+// are to be removed could be stated directly, but that should not make a big
+// difference performance-wise.
 
 void
 vt_contraction::cursor::import_edges(vt_contraction* vtab)
@@ -63,6 +66,14 @@ vt_contraction::cursor::import_edges(vt_contraction* vtab)
     INSERT INTO history(src, dst) SELECT src, dst FROM edge
 
   )SQL");
+
+  tmpdb_.execute_script(R"SQL(
+
+    CREATE TABLE vertex AS
+    SELECT src AS vertex FROM edge UNION SELECT dst FROM edge
+
+  )SQL");
+
 }
 
 void
@@ -76,7 +87,7 @@ vt_contraction::cursor::contract_vertices(vt_contraction* vtab)
   }
 
   auto vertices_stmt =
-    tmpdb_.prepare("SELECT src FROM edge UNION SELECT dst FROM edge");
+    tmpdb_.prepare("SELECT vertex FROM vertex");
 
   vertices_stmt.execute();
 

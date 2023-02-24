@@ -5,17 +5,18 @@
 
 namespace fl = ::federlieb;
 
-class vt_deterministic_automaton
-  : public fl::vtab::base<vt_deterministic_automaton>
+class vt_dfa
+  : public fl::vtab::base<vt_dfa>
 {
 public:
-  static inline char const* const name = "deterministic_automaton";
+  static inline char const* const name = "fl_dfa";
 
-  using result_type = std::list<std::array<fl::value::variant, 2>>;
+  using result_type = fl::stmt;
 
   struct cursor
   {
-    cursor(vt_deterministic_automaton* vtab);
+    cursor(vt_dfa* vtab);
+    fl::db tmpdb_;
   };
 
   void xConnect(bool create);

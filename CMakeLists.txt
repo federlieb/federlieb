@@ -120,6 +120,7 @@ set(FEDERLIEB_EXT_SOURCES_LIST
   ext/vt_dijkstra_shortest_paths.cxx
   ext/vt_json_each.cxx
   ext/vt_script.cxx
+  ext/vt_dfa.cxx
 
   ext/fx_toset.cxx
   ext/fx_kcrypto.cxx
