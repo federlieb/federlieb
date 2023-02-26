@@ -273,6 +273,8 @@ vt_stmt::xBestIndex(fl::vtab::index_info& info)
     cache_->db.prepare(create_index_sql).execute();
   }
 
+  // TODO: read row count estimate from sqlite_stat1
+
   return true;
 }
 
@@ -346,7 +348,9 @@ vt_stmt::xFilter(const fl::vtab::index_info& info, cursor* cursor)
   auto constrained_select = cache->select_sql;
 
 #if 1
-  // TODO: move this to bestindex
+  // TODO: move this to bestindex. Requires changes to index structure. Also
+  // a protocol to bind constraints here (like, a naming scheme, so we can also
+  // get a prepared statement from the query plan and just fill in bind params).
 
   auto constraints = to_where_fragment("data", info);
 

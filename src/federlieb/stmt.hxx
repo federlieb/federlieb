@@ -45,6 +45,24 @@ protected:
   sqlite3* db() const;
 };
 
+class scanstat {
+  explicit scanstat(fl::stmt* stmt, int index);
+  int index();
+  sqlite3_int64 nloop();
+  sqlite3_int64 nvisit();
+  double est();
+  std::optional<std::string> name();
+  std::optional<std::string> explain();
+  int selectid();
+  int parentid();
+  sqlite3_int64 ncycle();
+
+protected:
+  int idx_ = -1;
+  fl::stmt* stmt_ = nullptr;
+  sqlite3* db() const;
+};
+
 class stmt
 {
 public:
@@ -160,6 +178,7 @@ protected:
   friend class fl::row;
   friend class fl::field;
   friend class fl::column;
+  friend class fl::scanstat;
 
   enum class state
   {

@@ -3,6 +3,8 @@
 #include <boost/callable_traits/class_of.hpp>
 #include <boost/mp11.hpp>
 #include <boost/stl_interfaces/iterator_interface.hpp>
+#include <boost/dll.hpp>
+#include <boost/filesystem.hpp>
 
 #include <iostream>
 #include <numeric>
@@ -23,11 +25,93 @@
 #include <linux/socket.h>
 #include <sys/socket.h>
 
+
+void unparenthesize(std::string& s) {
+  s.erase(0, s.find_first_of("(") + 1);
+  s.erase(s.find_last_of(")"));
+}
+
+
 int
 main()
 {
+
+  struct transition {
+    uint32_t src;
+    uint32_t via;
+    uint32_t dst;
+  };
+
+  std::vector<transition> transitions;
+
+  transitions.push_back({1,2,3});
+  transitions.push_back({1,1,4});
+  transitions.push_back({3,1,3});
+  transitions.push_back({4,2,1});
+  transitions.push_back({2,2,4});
+
+  std::ranges::sort(transitions, {}, [](auto&& e){
+    return std::make_tuple(e.src, e.via, e.dst);
+  });
+
+  std::vector<std::pair<size_t, size_t>> index;
+
+  auto max_src = std::ranges::max(transitions, {}, [](auto&& e) { return e.src; });
+  index.resize(max_src.src);
+
+  auto prev = transitions.front().src;
+
+  index[prev].first = 0;
+
+  for (size_t ix = 0; ix < transitions.size(); ++ix) {
+    auto&& e = transitions[ix];
+    if (e.src != prev) {
+      index[prev].second = ix;
+      index[e.src].first = ix;
+      prev = e.src;
+    }
+  }
+
+  index[prev].second = transitions.size();
+
+  std::vector<transition> result;
+
+  std::copy(transitions.begin() + index[2].first, transitions.begin() + index[2].second, std::back_inserter(result));
+  std::copy(transitions.begin() + index[1].first, transitions.begin() + index[1].second, std::back_inserter(result));
+
+  std::ranges::sort(result, {}, [](auto&& e) {
+    return std::make_tuple(e.via, e.dst);
+  });
+
+  std::ranges::unique(result, {}, [](auto&& e) {
+    return std::make_tuple(e.via, e.dst);
+  });
+
   return 0;
 }
+
+#if 0
+int
+main()
+{
+
+  // auto p = boost::filesystem::path();
+  // auto x = boost::dll::import_symbol(p, "sqlite3_open");
+
+  auto pl = boost::dll::program_location();
+  auto k = pl.c_str();
+  auto x = boost::dll::shared_library(pl);
+  auto y = x.has("sqlit3_open_v2");
+  auto z = x.has("_sqlit3_open");
+  // auto m = boost::dll::import_symbol<int(char*,sqlite3*)>(pl, "sqlite3_open", boost::dll::load_mode::rtld_lazy);
+  auto u = dlsym(RTLD_NEXT, "sqlite3_open");
+
+  sqlite3* db;
+  int rc = sqlite3_open(":memory:", &db);
+
+  return 0;
+}
+#endif
 
 #if 0
 struct convA

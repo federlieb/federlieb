@@ -274,6 +274,68 @@ fl::stmt_iterator::db() const
   return stmt_->db();
 }
 
+int fl::scanstat::index() {
+  return idx_;
+}
+
+fl::scanstat::scanstat(fl::stmt* stmt, int index) {
+  stmt_ = stmt;
+  idx_ = index;
+}
+
+sqlite3_int64 fl::scanstat::nloop() {
+  sqlite3_int64 value = -1;
+  // int rc = fl::api(sqlite3_stmt_scanstatus, { SQLITE_OK }, db(), stmt_->stmt_.get(), index(), SQLITE_SCANSTAT_NLOOP, static_cast<void*>(&value));
+  return value;
+}
+
+sqlite3_int64 fl::scanstat::nvisit() {
+  sqlite3_int64 value = -1;
+  // int rc = fl::api(sqlite3_stmt_scanstatus, { SQLITE_OK }, db(), stmt_->stmt_.get(), index(), SQLITE_SCANSTAT_NVISIT, static_cast<void*>(&value));
+  return value;
+}
+
+double fl::scanstat::est() {
+  double value = -1;
+  // int rc = fl::api(sqlite3_stmt_scanstatus, { SQLITE_OK }, db(), stmt_->stmt_.get(), index(), SQLITE_SCANSTAT_EST, static_cast<void*>(&value));
+  return value;
+}
+
+std::optional<std::string> fl::scanstat::name() {
+  const char* value = nullptr;
+  // int rc = fl::api(sqlite3_stmt_scanstatus, { SQLITE_OK }, db(), stmt_->stmt_.get(), index(), SQLITE_SCANSTAT_SELECTID, static_cast<void*>(&value));
+  return value;
+}
+
+std::optional<std::string> fl::scanstat::explain() {
+  const char* value = nullptr;
+  // int rc = fl::api(sqlite3_stmt_scanstatus, { SQLITE_OK }, db(), stmt_->stmt_.get(), index(), SQLITE_SCANSTAT_SELECTID, static_cast<void*>(&value));
+  return value;
+}
+
+int fl::scanstat::selectid() {
+  int value = -1;
+  // int rc = fl::api(sqlite3_stmt_scanstatus, { SQLITE_OK }, db(), stmt_->stmt_.get(), index(), SQLITE_SCANSTAT_SELECTID, static_cast<void*>(&value));
+  return value;
+}
+
+int fl::scanstat::parentid() {
+  int value = -1;
+  #if 0
+  int rc = fl::api(sqlite3_stmt_scanstatus, { SQLITE_OK }, db(), stmt_->stmt_.get(), index(), SQLITE_SCANSTAT_PARENTID, static_cast<void*>(&value));
+  #endif
+  return value;
+}
+
+sqlite3_int64 fl::scanstat::ncycle() {
+  sqlite3_int64 value = -1;
+  #if 0
+  int rc = fl::api(sqlite3_stmt_scanstatus, { SQLITE_OK }, db(), stmt_->stmt_.get(), index(), SQLITE_SCANSTAT_NCYCLE, static_cast<void*>(&value));
+  #endif
+  return value;
+
+}
+
 static_assert(std::movable<fl::stmt_iterator>);
 static_assert(std::input_iterator<fl::stmt_iterator>);
 static_assert(std::ranges::range<fl::stmt>);

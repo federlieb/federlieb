@@ -14,7 +14,7 @@ public:
   void xStep(const std::string& value,
              const fl::value::variant& sort_key,
              const std::string& separator = ",");
-  std::string xFinal();
+  std::optional<std::string> xFinal();
 
 protected:
   std::vector<std::tuple<std::string, fl::value::variant, std::string>> data_;

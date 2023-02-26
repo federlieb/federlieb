@@ -12,11 +12,13 @@ fx_ordered_concat_agg::xStep(const std::string& value,
   data_.push_back(std::make_tuple(value, sort_key, separator));
 }
 
-std::string
+std::optional<std::string>
 fx_ordered_concat_agg::xFinal()
 {
 
-  fl::error::raise_if(data_.size() < 1, "xFinal on empty aggregate");
+  if (data_.size() < 1) {
+    return std::nullopt;
+  }
 
   std::ranges::stable_sort(data_, {}, [](auto& e) { return std::get<1>(e); });
 
