@@ -59,6 +59,13 @@ vt_dfa::cursor::cursor(vt_dfa* vtab)
       (select id from nfastate where state is NEW.dst);
   end;
 
+  create table workspace(
+    src int,
+    via int,
+    dst blob,
+    round int
+  );
+
   create table dfatrans(
     id integer primary key,
     src int,
@@ -74,6 +81,8 @@ vt_dfa::cursor::cursor(vt_dfa* vtab)
     round int,
     unique(state)
   );
+
+  create index idx_dfastate_round on dfastate(round);
 
   create view dfapipeline as select null as src, null as via, null as dst, null as round where false;
   create trigger dfapipeline instead of insert on dfapipeline
@@ -95,6 +104,8 @@ vt_dfa::xConnect(bool create)
         no_incoming       JSON [BLOB] HIDDEN VT_REQUIRED,
         no_outgoing       JSON [BLOB] HIDDEN VT_REQUIRED,
         nfa_transitions   JSON [BLOB] HIDDEN VT_REQUIRED,
+        state_limit       INT HIDDEN,
+        incomplete        INT,
         dfa_states        JSON [BLOB],
         dfa_transitions   JSON [BLOB]
       )
@@ -109,6 +120,10 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
   auto& no_incoming = info.columns[1].constraints[0].current_value.value();
   auto& no_outgoing = info.columns[2].constraints[0].current_value.value();
   auto& nfa_transitions = info.columns[3].constraints[0].current_value.value();
+  auto& state_limit = info.columns[4].constraints[0].current_value;
+
+  sqlite3_int64 state_limit_int =
+    state_limit ? std::get<fl::value::integer>(state_limit.value()).value : -1;
 
   cursor->tmpdb_.prepare("BEGIN TRANSACTION").execute();
 
@@ -190,31 +205,17 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
 
   )SQL");
 
-  // auto update_done_stmt = cursor->tmpdb_.prepare(R"SQL(
-
-  //   update dfastate set done = true where id = ?1
-
-  // )SQL");
-
-  // auto todo_stmt = cursor->tmpdb_.prepare(R"SQL(
-
-  //   select id from dfastate where done is false order by id limit 1
-
-  // )SQL");
-
   auto done_stmt = cursor->tmpdb_.prepare(R"SQL(
 
     select 1 where exists (select 1 from dfastate where round = :round)
 
   )SQL");
 
+  auto count_stmt = cursor->tmpdb_.prepare(R"SQL(
 
-  // auto insert_dfa_trans_stmt = cursor->tmpdb_.prepare(
-  // R"SQL(
+    select count(*) from dfastate
 
-  //   insert into dfapipeline(src, via, dst) values(?1, ?2, ?3)
-
-  // )SQL");
+  )SQL");
 
   auto compute_stmt = cursor->tmpdb_.prepare(
   R"SQL(
@@ -226,9 +227,9 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
         fl_toset_agg(nfatrans.dst) as dst,
         :round as round
     from
-        dfastate s,
-        json_each(s.state) each
-        inner join nfatrans on nfatrans.src = each.value
+        dfastate s
+        cross join json_each(s.state) each
+        cross join nfatrans on nfatrans.src = each.value
     where
         s.round = :round - 1
     group by
@@ -238,48 +239,61 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
 
   )SQL");
 
-  cursor->tmpdb_.prepare("COMMIT").execute();
+  cursor->tmpdb_.prepare("commit").execute();
 
-  // cursor->tmpdb_.prepare("BEGIN TRANSACTION").execute();
+  bool incomplete = false;
 
   for (sqlite3_int64 round = 1; true; ++round) {
 
-    std::cout << round << '\n';
+    std::cout << round << "... " << '\n';
 
-    // todo_stmt.reset().execute();
-
-    // if (todo_stmt.empty()) {
-    //   break;
-    // }
-
-    // auto id = todo_stmt.current_row().at(0).to_integer();
-
+    cursor->tmpdb_.prepare("begin transaction").execute();
     compute_stmt.reset().execute(round);
     done_stmt.reset().execute(round);
+    cursor->tmpdb_.prepare("commit").execute();
 
     if (done_stmt.empty()) {
       break;
     }
 
-    // update_done_stmt.reset().execute(id);
+    auto count = count_stmt.reset().execute().current_row().at(0).to_integer();
+
+    if (state_limit_int >= 0 && count >= state_limit_int) {
+      incomplete = true;
+      break;
+    }
 
   }
-  
-  // cursor->tmpdb_.prepare("COMMIT").execute();
 
   return cursor->tmpdb_.prepare(R"SQL(
-
+    with s as (
+      select
+        dfastate.id,
+        json_group_array(nfastate.state) as nfa_states
+      from
+        dfastate
+          cross join json_each(dfastate.state) each
+          cross join nfastate on nfastate.id = each.value
+      group by
+        dfastate.id
+    )
     select
       ?1 as no_incoming,
       ?2 as no_outgoing,
       ?3 as nfa_transitions,
+      ?4 as state_limit,
+      ?5 as incomplete,
       (select
-        json_group_array(json_array(id, state)) from dfastate group by null
-      ) as dfa_states, 
+        json_group_array(json_array(id, nfa_states))
+        from s
+        group by null
+      ) as dfa_states,
       (select
-        json_group_array(json_array(src, via, dst)) from dfatrans group by null
+        json_group_array(json_array(src, via.via, dst))
+       from dfatrans inner join via on via.id = dfatrans.via
+       group by null
       ) as dfa_transitions
 
-  )SQL").execute(no_incoming, no_outgoing, nfa_transitions);
+  )SQL").execute(no_incoming, no_outgoing, nfa_transitions, state_limit_int, incomplete);
 
 }
