@@ -81,8 +81,10 @@ struct dfa {
 
   }
 
-  std::map<uint32_t, std::vector<uint32_t>>
+  std::map<uint32_t, std::set<uint32_t>>
   compute(fl::db& db, sqlite3_int64 id) {
+
+    // TODO: 
 
     auto stmt = db.prepare(
       "SELECT value FROM dfastate, JSON_EACH(state) WHERE dfastate.id = :id");
@@ -107,11 +109,11 @@ struct dfa {
     // std::vector<std::pair<uint32_t,uint32_t>> r2;
     // std::ranges::transform(result, std::back_inserter(r2), to_via_dst);
 
-    std::map<uint32_t, std::vector<uint32_t>> r2;
+    std::map<uint32_t, std::set<uint32_t>> r2;
 
     for (auto&& e : result) {
       auto&& via = r2[e.via];
-      via.push_back(e.dst);
+      via.insert(e.dst);
     }
 
     return r2;
@@ -284,7 +286,7 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
         fl_toset_agg(nfatrans.dst) as dst
     from
         dfastate s,
-        fl_json_each(s.state) each
+        json_each(s.state) each
         inner join nfatrans on nfatrans.src = each.value
     where
         s.id = :id
@@ -295,9 +297,10 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
 
   cursor->tmpdb_.prepare("COMMIT").execute();
 
-  dfa automaton(cursor->tmpdb_);
+  // dfa automaton(cursor->tmpdb_);
 
-  cursor->tmpdb_.prepare("BEGIN TRANSACTION").execute();
+  // cursor->tmpdb_.prepare("BEGIN TRANSACTION").execute();
+
   int i = 0;
   while (true) {
 
@@ -311,9 +314,11 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
 
     auto id = todo_stmt.current_row().at(0).to_integer();
 
-    // compute_stmt.reset().execute(id);
+    compute_stmt.reset().execute(id);
 
+#if 0
     auto result = automaton.compute(cursor->tmpdb_, id);
+
 
     for (auto&& e : result) {
       insert_dfa_trans_stmt.reset().execute(
@@ -324,11 +329,14 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
     }
 
     // std::cout << boost::json::serialize(boost::json::value_from(result)) << std::endl;
+#endif
+
 
     update_done_stmt.reset().execute(id);
 
   }
-  cursor->tmpdb_.prepare("COMMIT").execute();
+  
+  // cursor->tmpdb_.prepare("COMMIT").execute();
 
   return cursor->tmpdb_.prepare(R"SQL(
     select src, via, dst from dfatrans

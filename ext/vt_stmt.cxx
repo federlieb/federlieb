@@ -111,6 +111,8 @@ vt_stmt::init_cache(fl::stmt& stmt)
   db.prepare("DROP TABLE IF EXISTS meta").execute();
   db.prepare("DROP TABLE IF EXISTS data").execute();
   db.prepare("PRAGMA foreign_keys = 1").execute();
+  db.prepare("pragma synchronous = off").execute();
+  db.prepare("pragma journal_mode = memory").execute();
 
   auto px =
     std::views::iota(1, 1 + stmt.bind_parameter_count()) |
