@@ -6,7 +6,7 @@
 namespace fl = ::federlieb;
 
 vt_dfa::cursor::cursor(vt_dfa* vtab)
-  : tmpdb_("debug.sqlite")
+  : tmpdb_(":memory:")
 {
 
   fx_toset_agg::register_function(tmpdb_);
@@ -59,13 +59,6 @@ vt_dfa::cursor::cursor(vt_dfa* vtab)
       (select id from nfastate where state is NEW.dst);
   end;
 
-  create table workspace(
-    src int,
-    via int,
-    dst blob,
-    round int
-  );
-
   create table dfatrans(
     id integer primary key,
     src int,
@@ -84,6 +77,7 @@ vt_dfa::cursor::cursor(vt_dfa* vtab)
 
   create index idx_dfastate_round on dfastate(round);
 
+  -- not used at the moment
   create view dfapipeline as select null as src, null as via, null as dst, null as round where false;
   create trigger dfapipeline instead of insert on dfapipeline
   begin
@@ -120,12 +114,25 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
   auto& no_incoming = info.columns[1].constraints[0].current_value.value();
   auto& no_outgoing = info.columns[2].constraints[0].current_value.value();
   auto& nfa_transitions = info.columns[3].constraints[0].current_value.value();
-  auto& state_limit = info.columns[4].constraints[0].current_value;
+  // auto& state_limit = info.columns[4].constraints[0].current_value;
+
+  auto state_limit = info.get("state_limit", SQLITE_INDEX_CONSTRAINT_EQ);
 
   sqlite3_int64 state_limit_int =
-    state_limit ? std::get<fl::value::integer>(state_limit.value()).value : -1;
+    nullptr != state_limit ? std::get<fl::value::integer>(state_limit->current_value.value()).value : -1;
 
   cursor->tmpdb_.prepare("BEGIN TRANSACTION").execute();
+
+  // FIXME: Not sure this is needed...
+  cursor->tmpdb_.execute_script(R"SQL(
+    delete from nfastate;
+    delete from dfastate;
+    delete from nfatrans;
+    delete from dfatrans;
+    delete from instart;
+    delete from via;
+  )SQL");
+
 
   cursor->tmpdb_.prepare(R"SQL(
 
@@ -225,7 +232,7 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
         s.id as src,
         nfatrans.via as via,
         fl_toset_agg(nfatrans.dst) as dst,
-        :round as round
+        :round
     from
         dfastate s
         cross join json_each(s.state) each
@@ -249,6 +256,7 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
 
     cursor->tmpdb_.prepare("begin transaction").execute();
     compute_stmt.reset().execute(round);
+
     done_stmt.reset().execute(round);
     cursor->tmpdb_.prepare("commit").execute();
 

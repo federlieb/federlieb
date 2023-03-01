@@ -25,6 +25,8 @@ extern "C"
 #include "ext/vt_json_each.hxx"
 #include "ext/vt_script.hxx"
 #include "ext/vt_dfa.hxx"
+#include "ext/vt_articulation_points.hxx"
+#include "ext/vt_biconnected_components.hxx"
 
 extern "C"
 {
@@ -53,6 +55,8 @@ extern "C"
       vt_json_each::register_module(ours);
       vt_script::register_module(ours);
       vt_dfa::register_module(ours);
+      vt_articulation_points::register_module(ours);
+      vt_biconnected_components::register_module(ours);
 
       fx_toset::register_function(ours);
       fx_toset_agg::register_function(ours);

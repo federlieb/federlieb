@@ -121,6 +121,8 @@ set(FEDERLIEB_EXT_SOURCES_LIST
   ext/vt_json_each.cxx
   ext/vt_script.cxx
   ext/vt_dfa.cxx
+  ext/vt_articulation_points.cxx
+  ext/vt_biconnected_components.cxx
 
   ext/fx_toset.cxx
   ext/fx_kcrypto.cxx
