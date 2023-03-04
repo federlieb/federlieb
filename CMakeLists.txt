@@ -128,6 +128,8 @@ set(FEDERLIEB_EXT_SOURCES_LIST
   ext/fx_kcrypto.cxx
   ext/fx_counter.cxx
   ext/fx_ordered_concat_agg.cxx
+  ext/fx_infinity.cxx
+  ext/fx_median.cxx
 )
 
 add_executable(main main.cxx

@@ -11,6 +11,8 @@ extern "C"
 #include "ext/fx_kcrypto.hxx"
 #include "ext/fx_ordered_concat_agg.hxx"
 #include "ext/fx_toset.hxx"
+#include "ext/fx_infinity.hxx"
+#include "ext/fx_median.hxx"
 
 #include "ext/vt_contraction.hxx"
 #include "ext/vt_dominator_tree.hxx"
@@ -75,6 +77,9 @@ extern "C"
       fx_counter::register_function(ours);
 
       fx_ordered_concat_agg::register_function(ours);
+
+      fx_infinity::register_function(ours);
+      fx_median::register_function(ours);
 
     } catch (...) {
       return SQLITE_ERROR;

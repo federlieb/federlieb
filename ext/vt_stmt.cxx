@@ -286,6 +286,8 @@ vt_stmt::xBestIndex(fl::vtab::index_info& info)
   auto create_index_sql = idx.first;
   auto index_name = idx.second;
 
+  // TODO: even with no index, table row count can be gathered from sqlite_stat1
+
   if (!create_index_sql.empty()) {
     cache_->db.prepare(create_index_sql).execute();
 
@@ -327,6 +329,7 @@ vt_stmt::xBestIndex(fl::vtab::index_info& info)
         if (row.idx == index_name && std::string::npos != pos) {
           auto row_count = row.stat.substr(pos + 1);
           info.estimated_rows = std::stoi(row_count);
+          info.estimated_cost = 6 * info.estimated_rows;
         }
 
       }
@@ -394,6 +397,8 @@ vt_stmt::xFilter(const fl::vtab::index_info& info, cursor* cursor)
       .clear_bindings()
       .bind(":id", insert_meta_row.id)
       .executemany(user_stmt);
+
+    cache->db.execute_script("analyze");
 
     cache->change_meta_refcount(insert_meta_row.id, +1);
   }
