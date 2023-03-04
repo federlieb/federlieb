@@ -88,9 +88,9 @@ fl::vtab::constraint_op_to_string(int const op)
     case SQLITE_INDEX_CONSTRAINT_ISNOT:
       return "IS NOT";
     case SQLITE_INDEX_CONSTRAINT_ISNOTNULL:
-      return "IS NOT NULL";
+      return "IS NOT"; // Apparently so
     case SQLITE_INDEX_CONSTRAINT_ISNULL:
-      return "IS NULL";
+      return "IS"; // Apparently so
     case SQLITE_INDEX_CONSTRAINT_IS:
       return "IS";
   }
@@ -198,6 +198,8 @@ void
 fl::vtab::index_info_export(const fl::vtab::index_info& ours,
                             sqlite3_index_info* theirs)
 {
+
+  theirs->estimatedCost = ours.estimated_cost;
 
   if (sqlite3_libversion_number() >= 3008002) {
     theirs->estimatedRows = ours.estimated_rows;

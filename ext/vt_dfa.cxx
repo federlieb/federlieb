@@ -252,7 +252,7 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
 
   for (sqlite3_int64 round = 1; true; ++round) {
 
-    std::cout << round << "... " << '\n';
+    // std::cout << round << "... " << '\n';
 
     cursor->tmpdb_.prepare("begin transaction").execute();
     compute_stmt.reset().execute(round);
@@ -272,6 +272,13 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
     }
 
   }
+
+  count_stmt.reset();
+  compute_stmt.reset();
+  done_stmt.reset();
+
+  std::remove("debug.sqlite");
+  cursor->tmpdb_.execute_script("VACUUM INTO 'debug.sqlite'");
 
   return cursor->tmpdb_.prepare(R"SQL(
     with s as (

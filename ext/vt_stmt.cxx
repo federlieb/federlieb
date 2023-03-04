@@ -5,6 +5,13 @@
 
 namespace fl = ::federlieb;
 
+// TODO: major missing feature is garbage collection. The table does reference
+// counting to keep cached entries around while there are open cursors using
+// them, but there is no logic to dispose of them when no longer needed. That
+// includes a lack of logic to dispose of outdated record that are no longer
+// needed when new data, due to a new caching key, is materialized. So this
+// basically leaks memory until the virtual table is disposed.
+
 std::string
 to_where_fragment(const std::string& table_name,
                                               const fl::vtab::index_info& info)
@@ -38,7 +45,7 @@ to_where_fragment(const std::string& table_name,
   return ss.str();
 }
 
-std::string
+std::pair<std::string, std::string>
 to_create_index(const std::string& table_name, const fl::vtab::index_info& info)
 {
   std::stringstream ss;
@@ -69,18 +76,21 @@ to_create_index(const std::string& table_name, const fl::vtab::index_info& info)
 
   auto cols = boost::algorithm::join(columns, ",");
 
+  auto index_name = (
+    "fl_stmt_auto_index_" + quoted_table_name + "(" + cols + ")"); 
+
   if (!cols.empty()) {
     
     cols = "id," + cols;
 
     ss << "CREATE INDEX IF NOT EXISTS "
-      << fl::detail::quote_identifier("auto_index_" + quoted_table_name + "(" + cols + ")")
+      << fl::detail::quote_identifier(index_name)
       << " ON "
       << quoted_table_name
       << "(" << cols << ")";
   }
 
-  return ss.str();
+  return std::make_pair( ss.str(), index_name );
 }
 
 void
@@ -108,11 +118,13 @@ vt_stmt::init_cache(fl::stmt& stmt)
 
   fl::error::raise_if(stmt.column_count() < 1, "zero columns");
 
-  db.prepare("DROP TABLE IF EXISTS meta").execute();
-  db.prepare("DROP TABLE IF EXISTS data").execute();
-  db.prepare("PRAGMA foreign_keys = 1").execute();
-  db.prepare("pragma synchronous = off").execute();
-  db.prepare("pragma journal_mode = memory").execute();
+  db.execute_script(R"SQL(
+    drop table if exists meta;
+    drop table if exists data;
+    pragma foreign_keys = 1;
+    pragma synchronous = off;
+    pragma journal_mode = memory;
+  )SQL");
 
   auto px =
     std::views::iota(1, 1 + stmt.bind_parameter_count()) |
@@ -270,12 +282,57 @@ vt_stmt::xBestIndex(fl::vtab::index_info& info)
     }
   }
 
-  auto create_index_sql = to_create_index("data", info);
+  auto idx = to_create_index("data", info);
+  auto create_index_sql = idx.first;
+  auto index_name = idx.second;
+
   if (!create_index_sql.empty()) {
     cache_->db.prepare(create_index_sql).execute();
-  }
 
-  // TODO: read row count estimate from sqlite_stat1
+    // TODO: Does not really make sense here
+    cache_->db.prepare("analyze " + fl::detail::quote_identifier(index_name)).execute();
+
+    // TODO: Move this logic to a better place.
+
+    auto has_stmt1 = cache_->db.prepare(R"SQL(
+
+      select 1 from pragma_table_list where name = 'sqlite_stat1'
+
+    )SQL").execute();
+
+    if (!has_stmt1.empty()) {
+
+      auto stat1_stmt = cache_->db.prepare(R"SQL(
+
+        select tbl, idx, stat
+        from sqlite_stat1
+        where
+          idx is not null
+          and
+          tbl is not null
+          and
+          stat is not null
+          -- todo: where idx is :name
+
+      )SQL").execute();
+
+      struct sqlite_stat1 {
+        std::string tbl;
+        std::string idx;
+        std::string stat;
+      };
+
+      for (auto&& row : stat1_stmt | fl::as<sqlite_stat1>()) {
+        auto pos = row.stat.find_last_not_of("0123456789");
+        if (row.idx == index_name && std::string::npos != pos) {
+          auto row_count = row.stat.substr(pos + 1);
+          info.estimated_rows = std::stoi(row_count);
+        }
+
+      }
+    }
+
+  }
 
   return true;
 }

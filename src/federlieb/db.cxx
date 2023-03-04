@@ -29,6 +29,7 @@ fl::db::prepare(const std::string_view sql)
 {
   sqlite3_stmt* stmt = nullptr;
 
+  try {
   fl::api(sqlite3_prepare_v2,
           { SQLITE_OK },
           db_.get(),
@@ -37,6 +38,10 @@ fl::db::prepare(const std::string_view sql)
           fl::detail::safe_to<int>(sql.size()),
           &stmt,
           nullptr);
+  }
+  catch(...) {
+    fl::error::raise_if(true, sql);
+  }
 
   fl::error::raise_if(nullptr == stmt,
                       "sqlite3_prepare returned a nullptr stmt");
@@ -83,6 +88,7 @@ fl::db::execute_script(const std::string_view script)
 fl::value::variant
 fl::db::select_scalar(const std::string sql)
 {
+  // TODO: would be nice if this accepted bind parameters?
   auto stmt = prepare("SELECT (" + sql + ")");
   stmt.execute();
   fl::error::raise_if(stmt.begin() == stmt.end(), "no result");

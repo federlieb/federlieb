@@ -12,6 +12,10 @@ namespace fl = ::federlieb;
 // are to be removed could be stated directly, but that should not make a big
 // difference performance-wise.
 
+// There might even be use cases where removal of a vertex depends on which
+// edges are currently available, and likewise edge removal might depend on
+// the current state of the graph.
+
 void
 vt_contraction::cursor::import_edges(vt_contraction* vtab)
 {
