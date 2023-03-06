@@ -13,16 +13,15 @@ namespace fl = ::federlieb;
 // basically leaks memory until the virtual table is disposed.
 
 std::string
-to_where_fragment(const std::string& table_name,
-                                              const fl::vtab::index_info& info)
+to_where_fragment(const fl::vtab::index_info& info, int bind_param_count)
 {
   std::stringstream ss;
 
-  auto quoted_table_name = fl::detail::quote_identifier(table_name);
-
   for (auto column : info.columns) {
-    auto quoted_column_name = fl::detail::quote_identifier(
-      "c" + std::to_string(1 + column.column_index));
+
+    auto quoted_column_name = column.column_index < bind_param_count
+      ? fl::detail::quote_identifier("p" + std::to_string(1 + column.column_index))
+      : fl::detail::quote_identifier("c" + std::to_string(1 + column.column_index - bind_param_count));
 
     for (auto constraint : column.constraints) {
 
@@ -30,13 +29,14 @@ to_where_fragment(const std::string& table_name,
         continue;
       }
 
-      auto constraint_string = to_sql(constraint);
+      auto constraint_string = to_sql_with_bind_parameters(constraint, 1);
 
-      if (!constraint_string.empty() && column.column_index >= 0) {
+      if (!constraint_string.empty()) {
         if (ss.tellp() > 0) {
           ss << " AND ";
         }
-        ss << quoted_table_name << "." << quoted_column_name << " "
+        ss << quoted_column_name
+           << " "
            << constraint_string;
       }
     }
@@ -91,6 +91,24 @@ to_create_index(const std::string& table_name, const fl::vtab::index_info& info)
   }
 
   return std::make_pair( ss.str(), index_name );
+}
+
+fl::stmt
+do_stuff_with_cache_and_info(vt_stmt::cache& cache, const fl::vtab::index_info& info) {
+  auto constrained_select = cache.select_sql;
+
+  auto constraints = to_where_fragment(info, cache.bind_parameter_count);
+
+  if (!constraints.empty()) {
+    constrained_select += " AND (" + constraints + ")";
+  }
+
+  // std::cerr << constrained_select << std::endl;
+
+  auto stmt = cache.db.prepare(constrained_select);
+
+  return stmt;
+
 }
 
 void
@@ -224,7 +242,8 @@ vt_stmt::init_cache(fl::stmt& stmt)
     )SQL");
 
   return cache{
-    db, insert_meta_stmt, insert_data_stmt, update_refcount_stmt, select_sql
+    db, insert_meta_stmt, insert_data_stmt, update_refcount_stmt, select_sql,
+    stmt.bind_parameter_count()
   };
 }
 
@@ -337,6 +356,8 @@ vt_stmt::xBestIndex(fl::vtab::index_info& info)
 
   }
 
+  info.detail = vt_stmt::index_info_detail{ do_stuff_with_cache_and_info(*cache_, info) };
+
   return true;
 }
 
@@ -403,6 +424,7 @@ vt_stmt::xFilter(const fl::vtab::index_info& info, cursor* cursor)
     cache->change_meta_refcount(insert_meta_row.id, +1);
   }
 
+  // TODO: Can't this be done with the insert_meta_stmt? Document why not.
   cache->change_meta_refcount(insert_meta_row.id, +1);
 
   // xClose will later undo the refcount update, but xClose might also
@@ -412,24 +434,38 @@ vt_stmt::xFilter(const fl::vtab::index_info& info, cursor* cursor)
   auto constrained_select = cache->select_sql;
 
 #if 1
-  // TODO: move this to bestindex. Requires changes to index structure. Also
-  // a protocol to bind constraints here (like, a naming scheme, so we can also
-  // get a prepared statement from the query plan and just fill in bind params).
 
-  auto constraints = to_where_fragment("data", info);
+  fl::stmt stmt;
 
-  if (!constraints.empty()) {
-    constrained_select += " AND (" + constraints + ")";
+  if (!info.detail) {
+    // FIXME: needs better index info caching in vtab.hxx
+    stmt = do_stuff_with_cache_and_info(*cache, info);
+  } else {
+    stmt = std::any_cast<index_info_detail>(info.detail.value()).select_stmt;
   }
+
 #endif
 
   // log("D: vt_stmt xFilter called {}.\n", constrained_select);
 
-  auto stmt = cache->db.prepare(constrained_select);
+  stmt.reset().bind(":id", insert_meta_row.id);
 
-  stmt.bind(":id", insert_meta_row.id);
+  // log("D: Cache retrieval SQL:\n{}\n(for {})\n{}\n", stmt.sql(), arguments().front());
 
-  // log("D: Cache retrieval SQL:\n{}\n(for {})\n{}\n", stmt.expanded_sql(), arguments().front());
+  for (auto&& column : info.columns) {
+    for (auto&& constraint : column.constraints) {
+      if (constraint.argv_index) {
+        if (constraint.op != SQLITE_INDEX_CONSTRAINT_ISNOTNULL && constraint.op != SQLITE_INDEX_CONSTRAINT_ISNULL) {
+          fl::error::raise_if(!constraint.current_value, "impossible");
+          stmt.bind(constraint.argv_index.value() + 1, constraint.current_value.value());
+        } else {
+          stmt.bind(constraint.argv_index.value() + 1, nullptr);
+        }
+      }
+    }
+  }
+
+  // log("D: Cache retrieval SQL:\n{}\n(for {})\n{}\n", stmt.sql(), arguments().front());
 
   stmt.execute();
 

@@ -123,6 +123,7 @@ set(FEDERLIEB_EXT_SOURCES_LIST
   ext/vt_dfa.cxx
   ext/vt_articulation_points.cxx
   ext/vt_biconnected_components.cxx
+  ext/vt_miniucd.cxx
 
   ext/fx_toset.cxx
   ext/fx_kcrypto.cxx
@@ -130,6 +131,7 @@ set(FEDERLIEB_EXT_SOURCES_LIST
   ext/fx_ordered_concat_agg.cxx
   ext/fx_infinity.cxx
   ext/fx_median.cxx
+  ext/fx_only_value.cxx
 )
 
 add_executable(main main.cxx

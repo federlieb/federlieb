@@ -43,6 +43,14 @@ fl::vtab::to_sql(const fl::value::text& v)
 }
 
 std::string
+fl::vtab::to_sql(const fl::value::json& v)
+{
+  std::stringstream ss;
+  ss << std::quoted(v.value, '\'', '\'');
+  return ss.str();
+}
+
+std::string
 fl::vtab::to_sql(const fl::value::blob& v)
 {
   std::string out;
@@ -88,14 +96,39 @@ fl::vtab::constraint_op_to_string(int const op)
     case SQLITE_INDEX_CONSTRAINT_ISNOT:
       return "IS NOT";
     case SQLITE_INDEX_CONSTRAINT_ISNOTNULL:
-      return "IS NOT"; // Apparently so
+      return "IS NOT NULL";
     case SQLITE_INDEX_CONSTRAINT_ISNULL:
-      return "IS"; // Apparently so
+      return "IS NULL";
     case SQLITE_INDEX_CONSTRAINT_IS:
       return "IS";
   }
 
   return nullptr;
+}
+
+std::string
+fl::vtab::to_sql_with_bind_parameters(const fl::vtab::constraint_info& constraint, size_t offset)
+{
+
+  fl::error::raise_if(constraint.many_at_once.value_or(false), "unimplemented");
+
+  auto op_str = constraint_op_to_string(constraint.op);
+
+  if (nullptr != op_str) {
+    fl::error::raise_if(!constraint.argv_index, "impossible");
+
+    if (constraint.op == SQLITE_INDEX_CONSTRAINT_ISNOTNULL) {
+      return "IS NOT ?" + std::to_string(constraint.argv_index.value() + offset);
+    }
+
+    if (constraint.op == SQLITE_INDEX_CONSTRAINT_ISNULL) {
+      return "IS ?" + std::to_string(constraint.argv_index.value() + offset);
+    }
+
+    return std::string(op_str) + " ?" + std::to_string(constraint.argv_index.value() + offset);
+  }
+
+  return "";
 }
 
 std::string

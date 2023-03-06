@@ -13,6 +13,7 @@ extern "C"
 #include "ext/fx_toset.hxx"
 #include "ext/fx_infinity.hxx"
 #include "ext/fx_median.hxx"
+#include "ext/fx_only_value.hxx"
 
 #include "ext/vt_contraction.hxx"
 #include "ext/vt_dominator_tree.hxx"
@@ -29,6 +30,7 @@ extern "C"
 #include "ext/vt_dfa.hxx"
 #include "ext/vt_articulation_points.hxx"
 #include "ext/vt_biconnected_components.hxx"
+#include "ext/vt_miniucd.hxx"
 
 extern "C"
 {
@@ -59,6 +61,7 @@ extern "C"
       vt_dfa::register_module(ours);
       vt_articulation_points::register_module(ours);
       vt_biconnected_components::register_module(ours);
+      vt_miniucd::register_module(ours);
 
       fx_toset::register_function(ours);
       fx_toset_agg::register_function(ours);
@@ -80,6 +83,7 @@ extern "C"
 
       fx_infinity::register_function(ours);
       fx_median::register_function(ours);
+      fx_only_value::register_function(ours);
 
     } catch (...) {
       return SQLITE_ERROR;

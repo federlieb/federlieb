@@ -8,6 +8,7 @@
 #include <variant>
 #include <vector>
 #include <array>
+#include <any>
 
 #include <boost/json.hpp>
 
@@ -58,6 +59,7 @@ struct index_info
   double estimated_cost;
   bool order_by_consumed;
   size_t next_argv_index = 1;
+  std::optional<std::any> detail;
 
   void mark_wanted(const std::string& name, int const op);
   void mark_transferables(const std::string& column_name);
@@ -86,6 +88,9 @@ std::string
 to_sql(const fl::value::text& v);
 
 std::string
+to_sql(const fl::value::json& v);
+
+std::string
 to_sql(const fl::value::blob& v);
 
 std::string
@@ -97,6 +102,9 @@ constraint_op_to_string(int const op);
 std::string
 to_sql(const fl::vtab::constraint_info& constraint,
        bool const include_collation = false);
+
+std::string
+to_sql_with_bind_parameters(const fl::vtab::constraint_info& constraint, size_t offset = 0);
 
 fl::vtab::index_info
 index_info_import(std::vector<fl::vtab::column> columns_,
@@ -511,6 +519,7 @@ public:
         if ((idxNum - p.vtab->xBestIndexCallCount_) < p.vtab->index_info_cache_.size()) {
           info = p.vtab->index_info_cache_[ idxNum % p.vtab->index_info_cache_.size() ];
         } else {
+          // std::cerr << "Warning: JSON idxStr retrieval!!!" << std::endl;
           info = boost::json::value_to<fl::vtab::index_info>(
             boost::json::parse(idxStr));
         }

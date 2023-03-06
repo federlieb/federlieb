@@ -10,10 +10,10 @@ namespace fl = ::federlieb;
 CREATE VIRTUAL TABLE USING stmt((
   SELECT ...
 )
-, cache=(:memory:)
-, cache_key=cursor | (SELECT ...)
-, expire=...
-, mode=cursor|vtab
+, cache=(:memory:) -- not implemented
+, key=(SELECT ...) 
+, expire=...       -- not implemented
+, mode=cursor|vtab -- not implemented
 )
 
 */
@@ -31,8 +31,14 @@ public:
     fl::stmt insert_data_stmt;
     fl::stmt update_refcount_stmt;
     std::string select_sql;
+    int bind_parameter_count;
 
     void change_meta_refcount(int64_t const id, int64_t const diff);
+  };
+
+  struct index_info_detail
+  {
+    fl::stmt select_stmt;
   };
 
   std::optional<cache> cache_;
