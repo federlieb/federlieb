@@ -16,5 +16,5 @@ jobs:
             cmake --build build --config Debug --target all --
             python3 -m venv .venv
             . .venv/bin/activate
-            pip3 install rich pytest pysqlite3-binary
+            pip3 install rich pytest pysqlite3-binary networkx
             pytest tests
