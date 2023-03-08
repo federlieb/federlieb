@@ -5,6 +5,8 @@ extern "C"
   SQLITE_EXTENSION_INIT1
 };
 
+#include <boost/json/src.hpp>
+
 #include "federlieb/federlieb.hxx"
 
 #include "ext/fx_counter.hxx"

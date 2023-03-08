@@ -12,8 +12,8 @@ jobs:
           push: never
           runCmd: |
             .vscode/setup.sh
-            cmake -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake -S/workspaces/federlieb -B/workspaces/federlieb/build -G Ninja
-            cmake -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake --build build --config Debug --target all --
+            cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake -S/workspaces/federlieb -B/workspaces/federlieb/build -G Ninja
+            cmake --build build --config Debug --target all --
             python3 -m venv .venv
             . .venv/bin/activate
             pip3 install rich pytest pysqlite3-binary networkx

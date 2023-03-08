@@ -3,6 +3,9 @@ sqlite3/3.40.1
 boost/1.81.0
 fmt/9.1.0
 
+[options]
+boost/*:shared=False
+
 [generators]
 CMakeDeps
 CMakeToolchain
