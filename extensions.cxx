@@ -12,7 +12,7 @@ extern "C"
 #include "ext/fx_ordered_concat_agg.hxx"
 #include "ext/fx_toset.hxx"
 #include "ext/fx_infinity.hxx"
-#include "ext/fx_median.hxx"
+#include "ext/fx_statistics.hxx"
 #include "ext/fx_only_value.hxx"
 
 #include "ext/vt_contraction.hxx"
@@ -84,6 +84,9 @@ extern "C"
       fx_infinity::register_function(ours);
       fx_median::register_function(ours);
       fx_only_value::register_function(ours);
+      fx_median_p2q::register_function(ours);
+      fx_variance::register_function(ours);
+      fx_utf8_parts::register_function(ours);
 
     } catch (...) {
       return SQLITE_ERROR;

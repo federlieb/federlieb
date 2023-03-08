@@ -130,7 +130,7 @@ set(FEDERLIEB_EXT_SOURCES_LIST
   ext/fx_counter.cxx
   ext/fx_ordered_concat_agg.cxx
   ext/fx_infinity.cxx
-  ext/fx_median.cxx
+  ext/fx_statistics.cxx
   ext/fx_only_value.cxx
 )
 

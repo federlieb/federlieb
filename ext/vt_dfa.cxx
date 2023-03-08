@@ -99,6 +99,7 @@ vt_dfa::xConnect(bool create)
         no_outgoing       JSON [BLOB] HIDDEN VT_REQUIRED,
         nfa_transitions   JSON [BLOB] HIDDEN VT_REQUIRED,
         state_limit       INT HIDDEN,
+        fill              INT HIDDEN,
         incomplete        INT,
         dfa_states        JSON [BLOB],
         dfa_transitions   JSON [BLOB]
@@ -117,9 +118,13 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
   // auto& state_limit = info.columns[4].constraints[0].current_value;
 
   auto state_limit = info.get("state_limit", SQLITE_INDEX_CONSTRAINT_EQ);
+  auto fill = info.get("fill", SQLITE_INDEX_CONSTRAINT_EQ);
 
   sqlite3_int64 state_limit_int =
     nullptr != state_limit ? std::get<fl::value::integer>(state_limit->current_value.value()).value : -1;
+
+  sqlite3_int64 fill_int =
+    nullptr != fill ? std::get<fl::value::integer>(fill->current_value.value()).value : 0;
 
   cursor->tmpdb_.prepare("BEGIN TRANSACTION").execute();
 
@@ -132,7 +137,6 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
     delete from instart;
     delete from via;
   )SQL");
-
 
   cursor->tmpdb_.prepare(R"SQL(
 
@@ -190,6 +194,7 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
 
   cursor->tmpdb_.execute_script(R"SQL(
   
+    -- when via is null, consider that an epsilon-transition and replace it.
     insert or ignore into nfatrans(src, via, dst)
     with recursive base as (
       select src, via, dst from nfatrans
@@ -203,8 +208,14 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
 
     delete from nfatrans where via = (select id from via where via.via is null);
 
-    insert into dfastate(state, round)
-    select fl_toset_agg(nfastate.id), 0
+    -- dead state
+    insert into dfastate(id, state, round)
+    select 0, json_array(), 0
+    ;
+
+    -- start state
+    insert into dfastate(id, state, round)
+    select 1, fl_toset_agg(nfastate.id), 0
     from instart inner join nfastate on nfastate.state = instart.state
     ;
 
@@ -273,6 +284,24 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
 
   }
 
+  if (fill_int) {
+
+    cursor->tmpdb_.execute_script(R"SQL(
+
+      with base as (
+        select
+          s.id, via.id, 0
+        from
+          dfastate s join via left join dfatrans t on t.src = s.id and t.via = via.id
+        where
+          t.id is null and via.via is not null
+      )
+      insert into dfatrans(src, via, dst) select * from base
+
+    )SQL");
+    
+  }
+
   count_stmt.reset();
   compute_stmt.reset();
   done_stmt.reset();
@@ -297,7 +326,8 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
       ?2 as no_outgoing,
       ?3 as nfa_transitions,
       ?4 as state_limit,
-      ?5 as incomplete,
+      ?5 as fill,
+      ?6 as incomplete,
       (select
         json_group_array(json_array(id, nfa_states))
         from s
@@ -309,6 +339,6 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
        group by null
       ) as dfa_transitions
 
-  )SQL").execute(no_incoming, no_outgoing, nfa_transitions, state_limit_int, incomplete);
+  )SQL").execute(no_incoming, no_outgoing, nfa_transitions, state_limit_int, fill_int, incomplete);
 
 }
