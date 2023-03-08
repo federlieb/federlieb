@@ -1,12 +1,12 @@
 cmake_minimum_required(VERSION 3.9)
 
+# set(CMAKE_TOOLCHAIN_FILE ${CMAKE_BINARY_DIR}/conan_toolchain.cmake)
+
 project(federlieb
   DESCRIPTION  "C++23 bindings for SQLite"
   HOMEPAGE_URL "https://github.com/federlieb/federlieb/"
   LANGUAGES    "CXX"
 )
-
-include(${CMAKE_BINARY_DIR}/conan_paths.cmake)
 
 find_package(fmt REQUIRED)
 find_package(SQLite3 REQUIRED)
