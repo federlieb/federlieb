@@ -5,12 +5,16 @@
 	"build": {
 		"dockerfile": "Dockerfile"
 	},
-	"features": {
+	"features": {},
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"ms-vscode.cmake-tools",
+				"ms-vscode.cpptools",
+				"ms-python.python",
+				"ms-python.black-formatter"
+			]
+		}
 	},
-	"extensions": [
-		"ms-vscode.cmake-tools",
-		"ms-vscode.cpptools",
-		"ms-python.python",
-		"ms-python.black-formatter"
-	]
+	"postCreateCommand": "./.vscode/setup.sh"
 }
