@@ -33,7 +33,7 @@ vt_articulation_points::xFilter(const fl::vtab::index_info& info, cursor* cursor
   result_type result;
 
   for (auto e : points) {
-    result.push_back({cursor->g_.variant( 1 + e )});
+    result.push_back({cursor->g_.variant( e )});
   }
 
   return result;

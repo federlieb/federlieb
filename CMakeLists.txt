@@ -59,8 +59,10 @@ if (CMAKE_COMPILER_IS_GNUCXX)
 endif()
 
 if (CMAKE_COMPILER_IS_GNUCXX)
+
+  add_compile_options(-ffile-prefix-map=${CMAKE_SOURCE_DIR}=.)
+
   add_compile_options(
-    -fdebug-prefix-map=/workspaces/federlieb/build/=./
     -fconcepts-diagnostics-depth=4
     -fdiagnostics-color=always
   )
@@ -124,6 +126,7 @@ set(FEDERLIEB_EXT_SOURCES_LIST
   ext/vt_articulation_points.cxx
   ext/vt_biconnected_components.cxx
   ext/vt_miniucd.cxx
+  ext/vt_colormap.cxx
 
   ext/fx_toset.cxx
   ext/fx_kcrypto.cxx

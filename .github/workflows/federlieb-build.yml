@@ -16,3 +16,4 @@ jobs:
             cmake --build build --config Debug --target fl_extensions --
             . .venv/bin/activate
             pytest tests
+  

@@ -12,6 +12,9 @@ namespace fl = ::federlieb;
 // needed when new data, due to a new caching key, is materialized. So this
 // basically leaks memory until the virtual table is disposed.
 
+// TODO: to aid debugging and profiling, add the name of the table to all of
+// the queries (as comment at the beginning).
+
 std::string
 to_where_fragment(const fl::vtab::index_info& info, int bind_param_count)
 {
@@ -218,7 +221,7 @@ vt_stmt::init_cache(fl::stmt& stmt)
   auto select_sql = (fl::detail::format(
     R"SQL(
 
-      SELECT
+      SELECT /* {} */
         {}   /* meta.p1, meta.p2, ..., */
         {}   /* data.c1, data.c2, ..., */
         NULL /* TODO: unfortunate due to formatting limitations */
@@ -227,6 +230,7 @@ vt_stmt::init_cache(fl::stmt& stmt)
         (meta.id = :id)
 
     )SQL",
+    table_name_, // FIXME: needs escaping for use in comment
     fl::detail::str(px | fl::detail::prefix("meta.") |
                     fl::detail::suffix(", ")),
     fl::detail::str(cx | fl::detail::prefix("data.") |
@@ -301,6 +305,9 @@ vt_stmt::xBestIndex(fl::vtab::index_info& info)
     }
   }
 
+  // TODO: if the statement does not have unbound parameters it would be possible
+  // to materialize the statement here and report good estimates. 
+
   auto idx = to_create_index("data", info);
   auto create_index_sql = idx.first;
   auto index_name = idx.second;
@@ -311,6 +318,7 @@ vt_stmt::xBestIndex(fl::vtab::index_info& info)
     cache_->db.prepare(create_index_sql).execute();
 
     // TODO: Does not really make sense here
+    // TODO: do not analyze if index already existed
     cache_->db.prepare("analyze " + fl::detail::quote_identifier(index_name)).execute();
 
     // TODO: Move this logic to a better place.

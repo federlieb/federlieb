@@ -33,6 +33,7 @@ extern "C"
 #include "ext/vt_articulation_points.hxx"
 #include "ext/vt_biconnected_components.hxx"
 #include "ext/vt_miniucd.hxx"
+#include "ext/vt_colormap.hxx"
 
 extern "C"
 {
@@ -64,6 +65,7 @@ extern "C"
       vt_articulation_points::register_module(ours);
       vt_biconnected_components::register_module(ours);
       vt_miniucd::register_module(ours);
+      vt_colormap::register_module(ours);
 
       fx_toset::register_function(ours);
       fx_toset_agg::register_function(ours);

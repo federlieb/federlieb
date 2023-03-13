@@ -131,3 +131,67 @@ def test_dominator_tree(db: Db):
     rich.print(sorted(result))
 
     assert set(result) == set([x for x in pairs if x[0] != x[1]])
+
+
+
+
+"""
+
+-- supposed to give 3 and 7
+
+create virtual table ap using fl_articulation_points(
+	edges =(
+		with e(src, dst) as (
+			VALUES(0, 1)
+			UNION
+			VALUES(0, 2)
+			UNION
+			VALUES(0, 3)
+			UNION
+			VALUES(0, 7)
+			UNION
+			VALUES(1, 1)
+			UNION
+			VALUES(1, 2)
+			UNION
+			VALUES(1, 3)
+			UNION
+			VALUES(1, 7)
+			UNION
+			VALUES(2, 2)
+			UNION
+			VALUES(2, 3)
+			UNION
+			VALUES(3, 4)
+			UNION
+			VALUES(3, 5)
+			UNION
+			VALUES(3, 6)
+			UNION
+			VALUES(7, 10)
+			UNION
+			VALUES(4, 4)
+			UNION
+			VALUES(4, 5)
+			UNION
+			VALUES(4, 6)
+			UNION
+			VALUES(5, 6)
+			UNION
+			VALUES(5, 8)
+			UNION
+			VALUES(6, 9)
+			UNION
+			VALUES(8, 9)
+		)
+		select
+			src,
+			dst
+		from
+			e
+	)
+);
+
+
+
+"""
