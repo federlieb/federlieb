@@ -15,6 +15,11 @@ namespace fl = ::federlieb;
 // TODO: to aid debugging and profiling, add the name of the table to all of
 // the queries (as comment at the beginning).
 
+// TODO: needs an out=... parameter (repeatable) that causes xBestIndex to
+// reject query plans with an eq constraint on that column. Maybe. Would that
+// actually help? There is nothing in that that would inherently stop SQLite
+// from running a JOIN in the wrong order.
+
 std::string
 to_where_fragment(const fl::vtab::index_info& info, int bind_param_count)
 {

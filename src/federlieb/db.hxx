@@ -36,6 +36,8 @@ public:
 
   fl::value::variant select_scalar(const std::string sql);
 
+  bool is_interrupted();
+
   void register_module(const std::string& name, const sqlite3_module* const p);
 
   std::shared_ptr<sqlite3> ptr() { return db_; }

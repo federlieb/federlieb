@@ -12,7 +12,7 @@ public:
   static inline auto const deterministic = false;
   static inline auto const direct_only = false;
 
-  int64_t xFunc(const std::string& key, int64_t diff = 0);
+  int64_t xFunc(const std::string key, int64_t diff = 0);
 
 protected:
   std::map<std::string, int64_t> map_;

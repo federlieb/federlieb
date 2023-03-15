@@ -8,13 +8,17 @@ namespace federlieb::error {
 
 namespace fl = ::federlieb;
 
-#if 0
+struct interrupted : virtual std::exception
+{};
+
 struct missing_constraint : virtual std::exception
 {};
 
 std::ostream&
 operator<<(std::ostream& os, const fl::error::missing_constraint& e);
-#endif
+
+std::ostream&
+operator<<(std::ostream& os, const fl::error::interrupted& e);
 
 template<typename T>
 [[noreturn]] void inline raise(T e)

@@ -95,6 +95,14 @@ fl::db::select_scalar(const std::string sql)
   return (*std::ranges::begin(stmt)).at(0).to_variant();
 }
 
+bool
+fl::db::is_interrupted()
+{
+  return fl::api(sqlite3_is_interrupted,
+                 db_.get(),
+                 db_.get());
+}
+
 void
 fl::db::register_module(const std::string& name, const sqlite3_module* const p)
 {

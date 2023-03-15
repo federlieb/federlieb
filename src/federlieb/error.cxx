@@ -4,10 +4,15 @@
 
 namespace fl = ::federlieb;
 
-#if 0
 std::ostream&
 fl::error::operator<<(std::ostream& os, const fl::error::missing_constraint& e)
 {
   return os << "::missing_constraint";
 }
-#endif
+
+std::ostream&
+fl::error::operator<<(std::ostream& os, const fl::error::interrupted& e)
+{
+  return os << "::interrupted";
+}
+

@@ -542,6 +542,8 @@ public:
         p.state->end = std::ranges::end(p.state->result);
         p.state->it = std::ranges::begin(p.state->result);
 
+      } catch (const fl::error::interrupted& e) {
+        return SQLITE_INTERRUPT;
       } catch (...) {
         return SQLITE_INTERNAL;
       }

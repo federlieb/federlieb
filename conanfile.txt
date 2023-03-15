@@ -1,5 +1,5 @@
 [requires]
-sqlite3/3.40.1
+sqlite3/3.41.1
 boost/1.81.0
 fmt/9.1.0
 

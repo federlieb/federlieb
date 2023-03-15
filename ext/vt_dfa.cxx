@@ -5,9 +5,38 @@
 
 namespace fl = ::federlieb;
 
-vt_dfa::cursor::cursor(vt_dfa* vtab)
-  : tmpdb_(":memory:")
+vt_dfa::cursor::cursor(vt_dfa* vtab) {}
+
+// TODO: would be nice to have a couple of VIEWs that simplify the most common
+// JOINs 
+
+bool
+vt_dfa::xBestIndex(fl::vtab::index_info& info) {
+
+  auto eq = info.get("dfa_id", SQLITE_INDEX_CONSTRAINT_EQ);
+
+  if (nullptr != eq && eq->usable) {
+    return false;
+  }
+
+  return true;
+
+}
+
+void
+vt_dfa::xConnect(bool create)
 {
+
+  path_ = kwarg("db").value_or("'file:/dfa?vfs=memdb'");
+
+  fl::error::raise_if(path_.size() < 2, "bad db path");
+
+  // TODO: should verify single-quote use
+
+  path_.pop_back();
+  path_.erase(0, 1);
+
+  tmpdb_ = fl::db(path_);
 
   fx_toset_agg::register_function(tmpdb_);
   vt_json_each::register_module(tmpdb_);
@@ -15,42 +44,43 @@ vt_dfa::cursor::cursor(vt_dfa* vtab)
   tmpdb_.execute_script(R"SQL(
 
   pragma synchronous = off;
-  pragma journal_mode = memory;
+  pragma journal_mode = off;
 
-  create table dfa(
+  create table if not exists dfa(
     dfa_id integer primary key,
     start int default 1,
     dead int default 0,
     complete int default false
   );
 
-  create table nfastate(
+  create table if not exists nfastate(
     dfa_id integer not null,
     id integer primary key,
     state any [blob],
     unique(dfa_id, state)
   );
 
-  create table via(
+  create table if not exists via(
     dfa_id integer not null,
     id integer primary key,
     via any [blob],
     unique(dfa_id, via)
   );
 
-  create table nfatrans(
+  create table if not exists nfatrans(
     dfa_id integer not null,
     id integer primary key,
     src int,
     via int,
     dst int,
     unique(dfa_id,src,via,dst),
-    unique(dfa_id,via,src,dst),
-    unique(dfa_id,dst,via,src)
+    unique(dfa_id,via,src,dst)
   );
 
-  create view nfapipeline as select null as dfa_id, null as src, null as via, null as dst where false;
-  create trigger nfapipeline instead of insert on nfapipeline
+  create index if not exists idx_nfatrans_dfa_id_dst on nfatrans(dfa_id, dst);
+
+  create view if not exists nfapipeline as select null as dfa_id, null as src, null as via, null as dst where false;
+  create trigger if not exists nfapipeline instead of insert on nfapipeline
   begin
     insert or ignore into nfastate(dfa_id, state) values(NEW.dfa_id, NEW.src);
     insert or ignore into via(dfa_id, via)
@@ -67,7 +97,7 @@ vt_dfa::cursor::cursor(vt_dfa* vtab)
       (select id from nfastate where dfa_id is NEW.dfa_id and state is NEW.dst);
   end;
 
-  create table dfatrans(
+  create table if not exists dfatrans(
     dfa_id integer not null,
     id integer primary key,
     src int,
@@ -77,7 +107,7 @@ vt_dfa::cursor::cursor(vt_dfa* vtab)
     unique(dfa_id, via,src,dst)
   );
 
-  create table dfastate(
+  create table if not exists dfastate(
     dfa_id integer not null,
     id integer primary key,
     state any [blob],
@@ -85,10 +115,10 @@ vt_dfa::cursor::cursor(vt_dfa* vtab)
     unique(dfa_id, state)
   );
 
-  create index idx_dfastate_dfa_id_round on dfastate(dfa_id, round);
+  create index if not exists idx_dfastate_dfa_id_round on dfastate(dfa_id, round);
 
-  create view dfapipeline as select null as dfa_id, null as src, null as via, null as dst, null as round where false;
-  create trigger dfapipeline instead of insert on dfapipeline
+  create view if not exists dfapipeline as select null as dfa_id, null as src, null as via, null as dst, null as round where false;
+  create trigger if not exists dfapipeline instead of insert on dfapipeline
   begin
     insert or ignore into dfastate(dfa_id, state, round) values(NEW.dfa_id, NEW.dst, NEW.round);
     insert into dfatrans(dfa_id, src, via, dst)
@@ -96,11 +126,7 @@ vt_dfa::cursor::cursor(vt_dfa* vtab)
   end;
 
   )SQL");
-}
 
-void
-vt_dfa::xConnect(bool create)
-{
 
   declare(R"(
       CREATE TABLE fl_dfa(
@@ -111,7 +137,8 @@ vt_dfa::xConnect(bool create)
         fill              INT HIDDEN,
         incomplete        INT,
         dfa_states        JSON [BLOB],
-        dfa_transitions   JSON [BLOB]
+        dfa_transitions   JSON [BLOB],
+        dfa_id            INT
       )
     )");
 }
@@ -135,24 +162,9 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
   sqlite3_int64 fill_int =
     nullptr != fill ? std::get<fl::value::integer>(fill->current_value.value()).value : 0;
 
-  cursor->tmpdb_.prepare("BEGIN TRANSACTION").execute();
+  tmpdb_.prepare("begin transaction").execute();
 
-#if 0
-
-  // FIXME: Not sure this is needed...
-  cursor->tmpdb_.execute_script(R"SQL(
-    delete from nfastate;
-    delete from dfastate;
-    delete from nfatrans;
-    delete from dfatrans;
-    delete from via;
-  )SQL");
-
-#endif
-
-  sqlite_int64 dfa_id;
-
-  auto id_stmt = cursor->tmpdb_.prepare(R"SQL(
+  auto id_stmt = tmpdb_.prepare(R"SQL(
 
     with m as (select ifnull(max(id), -1) as m from dfastate)
     select m.m + 1 as dead_id, m.m + 2 as start_id
@@ -165,17 +177,17 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
 
   id_stmt.reset();
 
-  auto dfa_stmt = cursor->tmpdb_.prepare(R"SQL(
+  auto dfa_stmt = tmpdb_.prepare(R"SQL(
 
     insert into dfa(complete, start, dead)
     select false, ?1, ?2 returning dfa_id
 
   )SQL");
 
-  dfa_id = dfa_stmt.execute(start_id, dead_id).current_row().at(0);
+  sqlite_int64 dfa_id = dfa_stmt.execute(start_id, dead_id).current_row().at(0);
   dfa_stmt.reset();
 
-  cursor->tmpdb_.prepare(R"SQL(
+  tmpdb_.prepare(R"SQL(
 
     insert into nfapipeline(dfa_id, src, via, dst)
     select
@@ -198,58 +210,55 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
 
   )SQL").execute(dfa_id, nfa_transitions, no_incoming, no_outgoing);
 
-  cursor->tmpdb_.prepare(R"SQL(
+  tmpdb_.prepare(R"SQL(
 
     delete from nfatrans where nfatrans.id in (
       select nfatrans.id
       from json_each(?2) each
       cross join nfastate on nfastate.state = each.value and nfastate.dfa_id = ?1
       cross join nfatrans on nfatrans.dst = nfastate.id and nfatrans.dfa_id = nfastate.dfa_id
-    )
 
-  )SQL").execute(dfa_id, no_incoming);
+      union
 
-  cursor->tmpdb_.prepare(R"SQL(
-
-    delete from nfatrans where nfatrans.id in (
       select nfatrans.id
-      from json_each(?2) each
+      from json_each(?3) each
       cross join nfastate on nfastate.state = each.value and nfastate.dfa_id = ?1
       cross join nfatrans on nfatrans.src = nfastate.id and nfatrans.dfa_id = nfastate.dfa_id
+
+      union
+
+      select nfatrans.id from nfatrans where dfa_id = ?1 and dst is null
     )
 
-  )SQL").execute(dfa_id, no_outgoing);
+  )SQL").execute(dfa_id, no_incoming, no_outgoing);
 
-  cursor->tmpdb_.prepare(R"SQL(
-
-    delete from nfatrans where dst is null and dfa_id = ?1;
-
-  )SQL").execute(dfa_id);
-
-  cursor->tmpdb_.prepare(R"SQL(
+  tmpdb_.prepare(R"SQL(
 
     -- when via is null, consider that an epsilon-transition and replace it.
     insert or ignore into nfatrans(dfa_id, src, via, dst)
-    with recursive base as (
-      select dfa_id, src, via, dst from nfatrans where nfatrans.dfa_id = ?1 and via in (select id from via where dfa_id = ?1 and via is null)
+    with recursive
+    nullvia as materialized (select id from via where dfa_id = ?1 and via is null),
+    base as (
+      select dfa_id, src, via, dst from nfatrans where nfatrans.dfa_id = ?1 and via in (select id from nullvia)
       union
       select base.dfa_id, base.src, nfatrans.via, nfatrans.dst
       from base
-        inner join via on via.via is null and base.via = via.id and via.dfa_id = base.dfa_id
         inner join nfatrans on base.dst = nfatrans.src and nfatrans.dfa_id = base.dfa_id
+      where
+        base.via in (select id from nullvia)
     )
     select dfa_id, src, via, dst from base;
 
   )SQL").execute(dfa_id);
 
-  cursor->tmpdb_.prepare(R"SQL(
+  tmpdb_.prepare(R"SQL(
 
     delete from nfatrans where via = (select id from via where via.via is null and via.dfa_id = ?1) and nfatrans.dfa_id = ?1;
 
   )SQL").execute(dfa_id);
 
   // dead state
-  cursor->tmpdb_.prepare(R"SQL(
+  tmpdb_.prepare(R"SQL(
 
     insert into dfastate(dfa_id, id, state, round)
     select ?1, ?2, json_array(), 0
@@ -257,7 +266,7 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
   )SQL").execute(dfa_id, dead_id);
 
   // start state
-  cursor->tmpdb_.prepare(R"SQL(
+  tmpdb_.prepare(R"SQL(
 
     insert into dfastate(dfa_id, id, state, round)
     select ?1, ?2, fl_toset_agg(nfastate.id), 0
@@ -267,26 +276,26 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
 
 
   if (start_id < 2) {
-    cursor->tmpdb_.execute_script(R"SQL(
+    tmpdb_.execute_script(R"SQL(
 
       analyze /* vt_dfa xFilter */;
 
     )SQL");
   }
 
-  auto done_stmt = cursor->tmpdb_.prepare(R"SQL(
+  auto done_stmt = tmpdb_.prepare(R"SQL(
 
     select 1 where exists (select 1 from dfastate where dfa_id = ?1 and round = ?2)
 
   )SQL");
 
-  auto count_stmt = cursor->tmpdb_.prepare(R"SQL(
+  auto count_stmt = tmpdb_.prepare(R"SQL(
 
     select count(*) from dfastate where dfa_id = ?1
 
   )SQL");
 
-  auto compute_stmt = cursor->tmpdb_.prepare(
+  auto compute_stmt = tmpdb_.prepare(
   R"SQL(
 
     insert into dfapipeline(dfa_id, src, via, dst, round)
@@ -311,19 +320,23 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
 
   )SQL");
 
-  cursor->tmpdb_.prepare("commit").execute();
+  tmpdb_.prepare("commit").execute();
 
   bool incomplete = false;
 
   for (sqlite3_int64 round = 1; true; ++round) {
 
+    if (tmpdb_.is_interrupted()) {
+      throw fl::error::interrupted();
+    }
+
     // std::cout << round << "... " << '\n';
 
-    cursor->tmpdb_.prepare("begin transaction").execute();
+    tmpdb_.prepare("begin transaction").execute();
     compute_stmt.reset().execute(dfa_id, round);
 
     done_stmt.reset().execute(dfa_id, round);
-    cursor->tmpdb_.prepare("commit").execute();
+    tmpdb_.prepare("commit").execute();
 
     if (done_stmt.empty()) {
       break;
@@ -346,7 +359,7 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
 
   if (fill_int) {
 
-    cursor->tmpdb_.prepare(R"SQL(
+    tmpdb_.prepare(R"SQL(
 
       with base as (
         select
@@ -372,10 +385,16 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
 
   compute_stmt.reset();
 
-  std::remove("debug.sqlite");
-  cursor->tmpdb_.execute_script("VACUUM INTO 'debug.sqlite'");
+  tmpdb_.prepare(R"SQL(
 
-  return cursor->tmpdb_.prepare(R"SQL(
+    update dfa set complete = ?2 where dfa_id = ?1
+
+  )SQL").execute(dfa_id, !incomplete);
+
+  std::remove("debug.sqlite");
+  tmpdb_.execute_script("VACUUM INTO 'debug.sqlite'");
+
+  return tmpdb_.prepare(R"SQL(
 
     with s as (
       select
@@ -408,7 +427,8 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
         json_group_array(json_array(src, via.via, dst))
        from dfatrans inner join via on via.id = dfatrans.via and via.dfa_id = dfatrans.dfa_id where dfatrans.dfa_id = ?1
        group by null
-      ) as dfa_transitions
+      ) as dfa_transitions,
+      ?1 -- as dfa_id,
 
   )SQL").execute(dfa_id, no_incoming, no_outgoing, nfa_transitions, state_limit_int, fill_int, incomplete);
 
