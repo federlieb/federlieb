@@ -16,12 +16,10 @@ public:
   struct cursor
   {
     cursor(vt_dfa* vtab);
+    fl::db tmpdb_;
   };
 
   void xConnect(bool create);
-  bool xBestIndex(fl::vtab::index_info& info);
   result_type xFilter(const fl::vtab::index_info& info, cursor* cursor);
 
-  std::string path_;
-  fl::db tmpdb_;
 };

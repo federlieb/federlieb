@@ -171,7 +171,7 @@ vt_stmt::init_cache(fl::stmt& stmt)
   auto create_meta_stmt = db.prepare(fl::detail::format(
     R"SQL(
 
-      CREATE TABLE meta(
+      CREATE TABLE meta( /* {} */
           "id"       INTEGER PRIMARY KEY
         , "refcount" INTEGER
         , "key"      ANY [BLOB]
@@ -180,6 +180,7 @@ vt_stmt::init_cache(fl::stmt& stmt)
       )
 
     )SQL",
+    table_name_, // fixme: escape for comment
     fl::detail::str(px | fl::detail::prefix(", ") |
                     fl::detail::suffix(" ANY [BLOB]")),
     fl::detail::str(px | fl::detail::prefix(", "))));
@@ -187,12 +188,13 @@ vt_stmt::init_cache(fl::stmt& stmt)
   auto create_data_stmt = db.prepare(fl::detail::format(
     R"SQL(
 
-      CREATE TABLE data(
+      CREATE TABLE data( /* {} */
         id INTEGER REFERENCES meta(id) ON DELETE CASCADE
         {} /* , c1 type, c2 type... */
       )
 
     )SQL",
+    table_name_, // fixme: escape for comment
     fl::detail::str(cx | fl::detail::prefix(", ") |
                     fl::detail::suffix(" ANY [BLOB]"))));
 
@@ -203,13 +205,14 @@ vt_stmt::init_cache(fl::stmt& stmt)
   auto insert_meta_stmt = db.prepare(fl::detail::format(
     R"SQL(
 
-      INSERT INTO "meta"({} "key", "refcount") /* p1, p2, ... */
+      INSERT INTO /* {} */ "meta"({} "key", "refcount") /* p1, p2, ... */
       VALUES({} :key, -1)                      /* ?1, ?2, ... */
       ON CONFLICT DO
       UPDATE SET "refcount" = "refcount" + 1
       RETURNING "id", "refcount"
 
     )SQL",
+    table_name_, // fixme: escape for comment
     fl::detail::str(px | fl::detail::suffix(", ")),
     fl::detail::str(pqx | fl::detail::suffix(", "))));
 
@@ -241,14 +244,14 @@ vt_stmt::init_cache(fl::stmt& stmt)
     fl::detail::str(cx | fl::detail::prefix("data.") |
                     fl::detail::suffix(", "))));
 
-  auto update_refcount_stmt = db.prepare(
+  auto update_refcount_stmt = db.prepare(fl::detail::format(
     R"SQL(
 
-      UPDATE "meta"
+      UPDATE "meta" /* {} */
       SET "refcount" = "refcount" + :diff
       WHERE "id" = :id
 
-    )SQL");
+    )SQL", table_name_ /* fixme: escape for comment */));
 
   return cache{
     db, insert_meta_stmt, insert_data_stmt, update_refcount_stmt, select_sql,
@@ -436,6 +439,8 @@ vt_stmt::xFilter(const fl::vtab::index_info& info, cursor* cursor)
 
     cache->change_meta_refcount(insert_meta_row.id, +1);
   }
+
+  cache->insert_meta_stmt.reset();
 
   // TODO: Can't this be done with the insert_meta_stmt? Document why not.
   cache->change_meta_refcount(insert_meta_row.id, +1);
