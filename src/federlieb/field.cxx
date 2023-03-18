@@ -31,7 +31,7 @@ fl::field::db() const
 sqlite3_int64
 fl::field::to_integer() const
 {
-  fl::error::raise_if(type() != SQLITE_INTEGER, "not an INTEGER field");
+  fl::error::raise_if(type() != SQLITE_INTEGER, "not an INTEGER field (type " + std::to_string(type()) + ", index " + std::to_string(index_) + ")");
   return fl::api(sqlite3_column_int64, db(), row_.stmt_->stmt_.get(), index_);
 }
 

@@ -1,5 +1,8 @@
 #include "vt_stmt.hxx"
 #include "federlieb/federlieb.hxx"
+
+#include <atomic>
+
 #include <boost/algorithm/string/join.hpp>
 #include <fmt/core.h>
 
@@ -19,6 +22,17 @@ namespace fl = ::federlieb;
 // reject query plans with an eq constraint on that column. Maybe. Would that
 // actually help? There is nothing in that that would inherently stop SQLite
 // from running a JOIN in the wrong order.
+
+static std::atomic<int> finding_out_column_names = 0;
+
+struct guard {
+  guard() {
+    finding_out_column_names++;
+  }
+  ~guard() {
+    finding_out_column_names--;
+  }
+};
 
 std::string
 to_where_fragment(const fl::vtab::index_info& info, int bind_param_count)
@@ -147,7 +161,9 @@ vt_stmt::init_cache(fl::stmt& stmt)
   db.execute_script(R"SQL(
     drop table if exists meta;
     drop table if exists data;
-    pragma foreign_keys = 1;
+
+    -- fixme: temporarily off (since this never deletes anything)
+    pragma foreign_keys = 0;
     pragma synchronous = off;
     pragma journal_mode = memory;
   )SQL");
@@ -270,6 +286,8 @@ vt_stmt::xConnect(bool const create)
 
   fl::error::raise_if(args.empty(), "missing argument");
 
+  guard g;
+
   auto stmt = db().prepare("SELECT * FROM " + args.front());
 
   std::vector<std::string> column_defs;
@@ -298,6 +316,19 @@ vt_stmt::xConnect(bool const create)
 bool
 vt_stmt::xBestIndex(fl::vtab::index_info& info)
 {
+
+  // Materialize now to gather statistics if there are no parameters
+  if (1 > cache_->bind_parameter_count && !finding_out_column_names) {
+    auto copy = info;
+
+    for (auto&& column : copy.columns) {
+      column.constraints.resize(0);
+    }
+
+    vt_stmt::cursor c(this);
+    xFilter(copy, &c);
+  }
+
   // By default the base class will request the values for all `ÈQ`
   // constraints for all columns marked required. We can use more
   // constraints when retrieving a result from the cache.

@@ -1,3 +1,6 @@
+#include <unordered_map>
+#include <boost/unordered_map.hpp>
+
 #include "federlieb/federlieb.hxx"
 #include "vt_dfa.hxx"
 #include "fx_toset.hxx"
@@ -5,12 +8,202 @@
 
 namespace fl = ::federlieb;
 
-// TODO: would be nice to have a couple of VIEWs that simplify the most common
-// JOINs 
+struct helper {
 
-// TODO: use NULL as via in nfatrans when NULL is passed, instead of mapping
-// it through the via table.
+    using nfastate = uint32_t;
+    using dfastate = uint32_t;
+    using via = uint32_t;
+    using viadst = uint64_t;
 
+    template<typename T, typename E>
+    void insert_at(T& vec, size_t pos, E element) {
+      if (vec.size() <= pos) {
+        vec.resize( (pos + 1) * 2 );
+      }
+      vec[pos] = element;
+    }
+
+    helper(fl::db& db) {
+
+      struct posviadst {
+        size_t pos;
+        via via_;
+        nfastate dst;
+      };
+
+      auto trans_stmt = db.prepare(R"SQL(
+
+        select
+          row_number() over (order by src, via, dst),
+          ifnull(via, 0),
+          ifnull(dst, 0)
+        from
+          nfastate left join nfatrans on nfastate.id = nfatrans.src
+        order by
+          src, via, dst
+
+      )SQL");
+
+      trans_stmt.execute();
+
+      for (auto&& row : trans_stmt | fl::as<posviadst>()) {
+        viadst current_via = row.via_;
+        viadst current_dst = row.dst;
+        current_via <<= 32;
+        insert_at(trans_, row.pos, current_via | current_dst);
+      }
+
+      struct minmax {
+        nfastate vertex;
+        size_t min;
+        size_t max;
+      };
+
+      auto minmax_stmt = db.prepare(R"SQL(
+
+        with base as (
+          select
+            nfastate.id, row_number() over (order by src, via, dst) as pos
+          from
+            nfastate left join nfatrans on nfastate.id = nfatrans.src
+        )
+        select
+          id,
+          ifnull(min(pos), 1),
+          ifnull(max(pos), 0)
+        from
+          base
+        group by
+          id
+
+      )SQL");
+
+      minmax_stmt.execute();
+
+      for (auto&& row : minmax_stmt | fl::as<minmax>()) {
+        insert_at(min_, row.vertex, row.min);
+        insert_at(max_, row.vertex, row.max);
+      }
+
+      insert_state_stmt_ = db.prepare(R"SQL(
+
+        insert or ignore into dfastate(state, round) values(?1, ?2)
+
+      )SQL");
+
+      insert_trans_stmt_ = db.prepare(R"SQL(
+
+        insert into dfatrans(src, via, dst) values(?1, ?2, ?3)
+
+      )SQL");
+
+      state_to_id_stmt_ = db.prepare(R"SQL(
+
+        select id from dfastate where state = ?1
+
+      )SQL");
+
+    }
+
+    void done_via(dfastate src, via v, int32_t round, fl::stmt insert_stmt) {
+
+        if (!destinations_.empty()) {
+
+          std::ranges::sort(destinations_);
+
+          destinations_.erase(
+            std::unique(destinations_.begin(), destinations_.end()),
+            destinations_.end());
+
+          if (vec2id_.contains(destinations_)) {
+
+            insert_trans_stmt_.reset().execute(src, v, vec2id_[destinations_]);
+
+          } else {
+
+            auto state = boost::json::serialize(
+              boost::json::value_from(destinations_)
+            );
+
+            insert_state_stmt_.reset().execute(state, round);
+
+            state_to_id_stmt_.reset().bind(1, state).execute();
+
+            fl::error::raise_if(state_to_id_stmt_.empty(), "impossible");
+
+            int64_t id = state_to_id_stmt_.current_row().at(0).to_integer();
+            state_to_id_stmt_.reset();
+
+            vec2id_[destinations_] = id;
+
+            insert_trans_stmt_.reset().execute(src, v, id);
+
+          }
+
+        }
+        
+    }
+
+    void done_state(dfastate src, int32_t round, fl::stmt insert_stmt) {
+
+        std::ranges::sort(transitions_);
+
+        // NOTE: this assumes that via.id is never zero.
+        via prev_via = 0;
+
+        for (auto&& val : transitions_) {
+            std::pair<via, nfastate> vd = std::make_pair(val >> 32, val & 0xFFFFFFFFLU);
+            if (prev_via != vd.first) {
+                done_via(src, prev_via, round, insert_stmt);
+                destinations_.clear();
+                prev_via = vd.first;
+            }
+            destinations_.push_back(vd.second);
+        }
+
+        done_via(src, prev_via, round, insert_stmt);
+        destinations_.clear();
+    }
+
+    void accumulate(int32_t round, fl::stmt select_stmt, fl::stmt insert_stmt) {
+
+        struct dfanfa {
+          dfastate d;
+          nfastate n;
+        };
+
+        select_stmt.reset().execute();
+
+        // NOTE: this assumes that nfastate.id is never zero.
+        dfastate prev_src = 0;
+        
+        for (auto&& row : select_stmt | fl::as<dfanfa>()) {
+
+            if (prev_src != row.d) {
+                done_state(prev_src, round, insert_stmt);
+                prev_src = row.d;
+                transitions_.clear();
+            }
+
+            transitions_.insert(transitions_.end(), &trans_[min_[row.n]], &trans_[1 + max_[row.n]]);
+        }
+
+        done_state(prev_src, round, insert_stmt);
+        transitions_.clear();
+    }
+
+    std::vector<viadst> transitions_;
+    std::vector<nfastate> destinations_; 
+    std::vector<viadst> trans_;
+    std::vector<size_t> min_;
+    std::vector<size_t> max_;
+    fl::stmt insert_state_stmt_;
+    fl::stmt insert_trans_stmt_;
+    fl::stmt state_to_id_stmt_;
+
+    // NOTE: This is just a cache, it could be cleared anytime to save memory.
+    boost::unordered_map< std::vector<nfastate>, int64_t > vec2id_;
+};
 
 vt_dfa::cursor::cursor(vt_dfa* vtab) : tmpdb_(":memory:") {
 
@@ -67,9 +260,10 @@ vt_dfa::cursor::cursor(vt_dfa* vtab) : tmpdb_(":memory:") {
     id integer primary key,
     src int,
     via int,
-    dst int,
-    unique(src,via,dst),
-    unique(via,src,dst)
+    dst int
+    -- This is true, but no need to make SQLite check for it
+    -- , unique(src,via,dst)
+    -- , unique(via,src,dst)
   );
 
   create table if not exists dfastate(
@@ -134,18 +328,16 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
   cursor->tmpdb_.prepare("begin transaction").execute();
 
   cursor->tmpdb_.execute_script(R"SQL(
+
     delete from nfastate;
     delete from dfastate;
     delete from nfatrans;
     delete from dfatrans;
     delete from via;
+
   )SQL");
 
   auto id_stmt = cursor->tmpdb_.prepare(R"SQL(
-
-    -- with m as (select ifnull(max(id), -1) as m from dfastate)
-    -- select m.m + 1 as dead_id, m.m + 2 as start_id
-    -- from m
 
     select 0, 1
 
@@ -270,26 +462,50 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
   auto compute_stmt = cursor->tmpdb_.prepare(
   R"SQL(
 
-    insert into dfapipeline(src, via, dst, round)
+    with base as materialized (
+      select
+          s.id as src,
+          nfatrans.via as via,
+          fl_toset_agg(nfatrans.dst) as dst,
+          ?1
+      from
+          dfastate s
+          cross join json_each(s.state) each
+          cross join nfatrans on nfatrans.src = each.value
+      where
+          s.round = ( (?1) - 1 )
+      group by
+          s.id, nfatrans.via
+    )
+    -- insert into dfapipeline(src, via, dst, round)
+    select * from base order by 1, 2
+
+  )SQL");
+
+  auto helper_stmt = cursor->tmpdb_.prepare(
+  R"SQL(
+
     select
         s.id as src,
-        nfatrans.via as via,
-        fl_toset_agg(nfatrans.dst) as dst,
-        ?1
+        each.value
     from
         dfastate s
         cross join json_each(s.state) each
-        cross join nfatrans on nfatrans.src = each.value
     where
         s.round = ( (?1) - 1 )
-    group by
-        s.id, nfatrans.via
-    order by
-        1, 2
+
+  )SQL");
+
+
+  auto insert_stmt = cursor->tmpdb_.prepare(R"SQL(
+
+    insert into dfapipeline(src, via, dst, round) values(?1,?2,?3,?4)
 
   )SQL");
 
   cursor->tmpdb_.prepare("commit").execute();
+
+  helper h(cursor->tmpdb_);
 
   bool incomplete = false;
 
@@ -302,7 +518,14 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
     // std::cout << round << "... " << '\n';
 
     cursor->tmpdb_.prepare("begin transaction").execute();
-    compute_stmt.reset().execute(round);
+
+    // compute_stmt.reset().execute(round);
+
+    helper_stmt.reset().bind(1, round);
+
+    h.accumulate(round, helper_stmt, insert_stmt);
+
+    // insert_stmt.reset().executemany(compute_stmt);
 
     done_stmt.reset().execute(round);
     cursor->tmpdb_.prepare("commit").execute();
@@ -314,7 +537,7 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
     done_stmt.reset();
 
     count_stmt.reset().execute();
-    
+
     auto count = count_stmt.current_row().at(0).to_integer();
 
     count_stmt.reset();
@@ -348,8 +571,8 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
 
   compute_stmt.reset();
 
-  // std::remove("debug.sqlite");
-  // cursor->tmpdb_.execute_script("VACUUM INTO 'debug.sqlite'");
+  std::remove("debug.sqlite");
+  cursor->tmpdb_.execute_script("VACUUM INTO 'debug.sqlite'");
 
   return cursor->tmpdb_.prepare(R"SQL(
 
