@@ -1,5 +1,7 @@
 #pragma once
 
+#include <mutex>
+
 #include "federlieb/vtab.hxx"
 #include "vt_bgl.hxx"
 
@@ -25,8 +27,7 @@ public:
   result_type xFilter(const fl::vtab::index_info& info, cursor* cursor);
 
   struct ref_counted_memory {
-    // NOTE: This is probably not threadsafe.
-    std::atomic<int> rc = 1;
+    int rc = 1;
     std::vector<fl::value::blob> dfas;
   };
 

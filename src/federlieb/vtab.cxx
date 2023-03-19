@@ -6,7 +6,7 @@
 namespace fl = ::federlieb;
 
 // TODO: Instead of encoding xBestIndex information as JSON in idxStr, make use
-// of the fact that SQLite considers a return value of SQLITE_CONSTRAINT from
+// of the fact that SQLite considers a return value of SQLITE_SCHEMA from
 // xFilter a sign that xBestIndex needs to be run again (because the scheme may
 // have changed since preparing the statement) and does so for a configurable
 // number of times (SQLITE_MAX_SCHEMA_RETRY) when using `sqlite3_prepare_v2`.

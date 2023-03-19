@@ -8,6 +8,11 @@
 
 namespace fl = ::federlieb;
 
+static std::mutex g_mutex;
+
+// TODO: there is still a bug here where the helper generates transitions for
+// via=0 and dst=0.
+
 struct helper {
 
     using nfastate = uint32_t;
@@ -215,6 +220,14 @@ vt_dfa::cursor::cursor(vt_dfa* vtab) : tmpdb_(":memory:") {
   pragma synchronous = off;
   pragma journal_mode = off;
 
+  create table if not exists dfa(
+    complete int not null default false,
+    state_limit int default -1,
+    fill int not null default false,
+    start_state int not null,
+    dead_state int not null
+  );
+
   create table if not exists nfastate(
     id integer primary key,
     state any [blob],
@@ -305,8 +318,40 @@ void
 vt_dfa::xDisconnect(bool destroy) {
 
   if (destroy) {
-    // TODO: drop shadow tables
+
+    db().execute_script(fl::detail::format(R"SQL(
+
+      drop table if exists {}.{};
+      drop table if exists {}.{};
+      drop table if exists {}.{};
+      drop table if exists {}.{};
+      drop table if exists {}.{};
+      drop table if exists {}.{};
+      drop table if exists {}.{};
+      drop table if exists {}.{};
+
+      )SQL",
+      fl::detail::quote_identifier(schema_name_),
+      fl::detail::quote_identifier(table_name_ + "_dfa"),
+      fl::detail::quote_identifier(schema_name_),
+      fl::detail::quote_identifier(table_name_ + "_nfastate"),
+      fl::detail::quote_identifier(schema_name_),
+      fl::detail::quote_identifier(table_name_ + "_dfastate"),
+      fl::detail::quote_identifier(schema_name_),
+      fl::detail::quote_identifier(table_name_ + "_nfatrans"),
+      fl::detail::quote_identifier(schema_name_),
+      fl::detail::quote_identifier(table_name_ + "_dfatrans"),
+      fl::detail::quote_identifier(schema_name_),
+      fl::detail::quote_identifier(table_name_ + "_via"),
+      fl::detail::quote_identifier(schema_name_),
+      fl::detail::quote_identifier(table_name_ + "_nfatrans_via"),
+      fl::detail::quote_identifier(schema_name_),
+      fl::detail::quote_identifier(table_name_ + "_dfatrans_via")
+      )
+    );
   }
+
+  const std::lock_guard<std::mutex> lock(g_mutex);
 
   if (memory_) {
     memory_->rc--;
@@ -332,7 +377,8 @@ vt_dfa::xConnect(bool create)
         incomplete        INT,
         dfa_states        JSON [BLOB],
         dfa_transitions   JSON [BLOB],
-        dfa_id            INT
+        dfa_id            INT,
+        state_count       INT
       )
     )");
 
@@ -340,6 +386,7 @@ vt_dfa::xConnect(bool create)
 
   db().execute_script(fl::detail::format(R"SQL(
 
+    create virtual table if not exists {}.{} using fl_dfa_view(dfa);
     create virtual table if not exists {}.{} using fl_dfa_view(nfastate);
     create virtual table if not exists {}.{} using fl_dfa_view(dfastate);
     create virtual table if not exists {}.{} using fl_dfa_view(nfatrans);
@@ -349,6 +396,8 @@ vt_dfa::xConnect(bool create)
     create virtual table if not exists {}.{} using fl_dfa_view(dfatrans_via);
 
     )SQL",
+    fl::detail::quote_identifier(schema_name_),
+    fl::detail::quote_identifier(table_name_ + "_dfa"),
     fl::detail::quote_identifier(schema_name_),
     fl::detail::quote_identifier(table_name_ + "_nfastate"),
     fl::detail::quote_identifier(schema_name_),
@@ -368,6 +417,7 @@ vt_dfa::xConnect(bool create)
 
   auto connect_stmt = db().prepare(fl::detail::format(R"SQL(
     select
+      (select 0 from {}.{} where ptr is :ptr and dfa_id = -1),
       (select 1 from {}.{} where ptr is :ptr and dfa_id = -1),
       (select 2 from {}.{} where ptr is :ptr and dfa_id = -1),
       (select 3 from {}.{} where ptr is :ptr and dfa_id = -1),
@@ -376,6 +426,8 @@ vt_dfa::xConnect(bool create)
       (select 6 from {}.{} where ptr is :ptr and dfa_id = -1),
       (select 7 from {}.{} where ptr is :ptr and dfa_id = -1)
     )SQL",
+    fl::detail::quote_identifier(schema_name_),
+    fl::detail::quote_identifier(table_name_ + "_dfa"),
     fl::detail::quote_identifier(schema_name_),
     fl::detail::quote_identifier(table_name_ + "_nfastate"),
     fl::detail::quote_identifier(schema_name_),
@@ -429,19 +481,12 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
     delete from nfatrans;
     delete from dfatrans;
     delete from via;
+    delete from dfa;
 
   )SQL");
 
-  auto id_stmt = cursor->tmpdb_.prepare(R"SQL(
-
-    select 0, 1
-
-  )SQL").execute();
-
-  sqlite3_int64 dead_id = id_stmt.current_row().at(0);
-  sqlite3_int64 start_id = id_stmt.current_row().at(1);
-
-  id_stmt.reset();
+  sqlite3_int64 dead_id = 0;
+  sqlite3_int64 start_id = 1;
 
   cursor->tmpdb_.prepare(R"SQL(
 
@@ -666,7 +711,29 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
 
   compute_stmt.reset();
 
-  memory_->dfas.push_back(cursor->tmpdb_.serialize("main"));
+  sqlite3_int64 dfa_id = -1;
+
+  if (true) {
+
+    const std::lock_guard<std::mutex> lock(g_mutex);
+
+    dfa_id = 1 + fl::detail::safe_to<sqlite_int64>( memory_->dfas.size() );
+
+    cursor->tmpdb_.prepare(R"SQL(
+
+      insert into dfa(
+        complete, state_limit, fill, start_state, dead_state
+      ) values(
+        :complete, :state_limit, :fill, :start_state, :dead_state
+      )
+
+    )SQL").execute(
+      !incomplete, state_limit_int, fill_int, start_id, dead_id
+    );
+
+    memory_->dfas.push_back(cursor->tmpdb_.serialize("main"));
+
+  }
 
   return cursor->tmpdb_.prepare(R"SQL(
 
@@ -688,19 +755,12 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
       ?5 as state_limit,
       ?6 as fill,
       ?7 as incomplete,
-      (select
-        json_group_array(json_array(id, nfa_states))
-        from s
-        group by null
-      ) as dfa_states,
-      (select
-        json_group_array(json_array(src, via.via, dst))
-       from dfatrans inner join via on via.id = dfatrans.via 
-       group by null
-      ) as dfa_transitions,
-      ?1
+      null as dfa_states,
+      null as dfa_transitions,
+      ?1,
+      (select count(*) from dfastate) as state_count
 
-  )SQL").execute(memory_->dfas.size(), no_incoming, no_outgoing, nfa_transitions, state_limit_int, fill_int, incomplete);
+  )SQL").execute(dfa_id, no_incoming, no_outgoing, nfa_transitions, state_limit_int, fill_int, incomplete);
 
 }
 
@@ -726,6 +786,8 @@ vt_dfa_view::xBestIndex(fl::vtab::index_info& info)
 
 void
 vt_dfa_view::xDisconnect(bool destroy) {
+
+  const std::lock_guard<std::mutex> lock(g_mutex);
 
   if (memory_) {
     memory_->rc--;
