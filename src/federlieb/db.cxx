@@ -103,6 +103,40 @@ fl::db::is_interrupted()
                  db_.get());
 }
 
+fl::value::blob
+fl::db::serialize(const std::string& name) {
+
+  sqlite3_int64 size = 0;
+
+  auto&& data = fl::api(sqlite3_serialize,
+                 db_.get(),
+                 db_.get(),
+                 name.c_str(),
+                 &size,
+                 0);
+
+  auto casted = reinterpret_cast<fl::blob_type::value_type const*>(data);
+  auto result = fl::value::blob{ fl::blob_type(casted, casted + size) };
+
+  fl::api(sqlite3_free, db_.get(), data);
+
+  return result;
+}
+
+void
+fl::db::deserialize(const std::string& name, const fl::value::blob& data, unsigned flags) {
+
+  fl::api(sqlite3_deserialize,
+          { SQLITE_OK },
+          db_.get(),
+          db_.get(),
+          name.c_str(),
+          const_cast<unsigned char*>(reinterpret_cast<const unsigned char*>(&data.value[0])),
+          data.value.size(),
+          data.value.size(),
+          flags);
+}
+
 void
 fl::db::register_module(const std::string& name, const sqlite3_module* const p)
 {

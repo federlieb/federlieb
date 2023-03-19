@@ -336,6 +336,8 @@ vt_stmt::xBestIndex(fl::vtab::index_info& info)
   for (auto&& column : info.columns) {
     for (auto&& constraint : column.constraints) {
       if (constraint.usable && column.column_index >= 0) {
+
+        // TODO: is this still a good idea?
         info.estimated_cost = 1e3;
         if (!constraint.argv_index) {
           constraint.argv_index = info.next_argv_index++;

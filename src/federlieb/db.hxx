@@ -38,6 +38,10 @@ public:
 
   bool is_interrupted();
 
+  fl::value::blob serialize(const std::string& name);
+
+  void deserialize(const std::string& name, const fl::value::blob& data, unsigned flags);
+
   void register_module(const std::string& name, const sqlite3_module* const p);
 
   std::shared_ptr<sqlite3> ptr() { return db_; }

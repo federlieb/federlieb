@@ -283,7 +283,38 @@ vt_dfa::cursor::cursor(vt_dfa* vtab) : tmpdb_(":memory:") {
       select NEW.src, NEW.via, (select id from dfastate where state = NEW.dst);
   end;
 
+  create view dfatrans_via as
+  select
+    dfatrans.src, via.via, dfatrans.dst
+  from
+    dfatrans inner join via on via.id = dfatrans.via
+  ;
+
+  create view nfatrans_via as
+  select
+    nfatrans.src, via.via, nfatrans.dst
+  from
+    nfatrans inner join via on via.id = nfatrans.via
+  ;
+
   )SQL");
+
+}
+
+void
+vt_dfa::xDisconnect(bool destroy) {
+
+  if (destroy) {
+    // TODO: drop shadow tables
+  }
+
+  if (memory_) {
+    memory_->rc--;
+
+    if (memory_->rc <= 0) {
+      delete memory_;
+    }
+  }
 
 }
 
@@ -304,6 +335,70 @@ vt_dfa::xConnect(bool create)
         dfa_id            INT
       )
     )");
+
+  memory_ = new ref_counted_memory;
+
+  db().execute_script(fl::detail::format(R"SQL(
+
+    create virtual table if not exists {}.{} using fl_dfa_view(nfastate);
+    create virtual table if not exists {}.{} using fl_dfa_view(dfastate);
+    create virtual table if not exists {}.{} using fl_dfa_view(nfatrans);
+    create virtual table if not exists {}.{} using fl_dfa_view(dfatrans);
+    create virtual table if not exists {}.{} using fl_dfa_view(via);
+    create virtual table if not exists {}.{} using fl_dfa_view(nfatrans_via);
+    create virtual table if not exists {}.{} using fl_dfa_view(dfatrans_via);
+
+    )SQL",
+    fl::detail::quote_identifier(schema_name_),
+    fl::detail::quote_identifier(table_name_ + "_nfastate"),
+    fl::detail::quote_identifier(schema_name_),
+    fl::detail::quote_identifier(table_name_ + "_dfastate"),
+    fl::detail::quote_identifier(schema_name_),
+    fl::detail::quote_identifier(table_name_ + "_nfatrans"),
+    fl::detail::quote_identifier(schema_name_),
+    fl::detail::quote_identifier(table_name_ + "_dfatrans"),
+    fl::detail::quote_identifier(schema_name_),
+    fl::detail::quote_identifier(table_name_ + "_via"),
+    fl::detail::quote_identifier(schema_name_),
+    fl::detail::quote_identifier(table_name_ + "_nfatrans_via"),
+    fl::detail::quote_identifier(schema_name_),
+    fl::detail::quote_identifier(table_name_ + "_dfatrans_via")
+    )
+  );
+
+  auto connect_stmt = db().prepare(fl::detail::format(R"SQL(
+    select
+      (select 1 from {}.{} where ptr is :ptr and dfa_id = -1),
+      (select 2 from {}.{} where ptr is :ptr and dfa_id = -1),
+      (select 3 from {}.{} where ptr is :ptr and dfa_id = -1),
+      (select 4 from {}.{} where ptr is :ptr and dfa_id = -1),
+      (select 5 from {}.{} where ptr is :ptr and dfa_id = -1),
+      (select 6 from {}.{} where ptr is :ptr and dfa_id = -1),
+      (select 7 from {}.{} where ptr is :ptr and dfa_id = -1)
+    )SQL",
+    fl::detail::quote_identifier(schema_name_),
+    fl::detail::quote_identifier(table_name_ + "_nfastate"),
+    fl::detail::quote_identifier(schema_name_),
+    fl::detail::quote_identifier(table_name_ + "_dfastate"),
+    fl::detail::quote_identifier(schema_name_),
+    fl::detail::quote_identifier(table_name_ + "_nfatrans"),
+    fl::detail::quote_identifier(schema_name_),
+    fl::detail::quote_identifier(table_name_ + "_dfatrans"),
+    fl::detail::quote_identifier(schema_name_),
+    fl::detail::quote_identifier(table_name_ + "_via"),
+    fl::detail::quote_identifier(schema_name_),
+    fl::detail::quote_identifier(table_name_ + "_nfatrans_via"),
+    fl::detail::quote_identifier(schema_name_),
+    fl::detail::quote_identifier(table_name_ + "_dfatrans_via")
+    )
+  );
+
+  connect_stmt.bind_pointer(":ptr", "vt_dfa_view:ptr", static_cast<void*>(memory_));
+
+  for (auto&& row : connect_stmt.execute()) {
+    /**/
+  }
+
 }
 
 vt_dfa::result_type
@@ -571,8 +666,7 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
 
   compute_stmt.reset();
 
-  std::remove("debug.sqlite");
-  cursor->tmpdb_.execute_script("VACUUM INTO 'debug.sqlite'");
+  memory_->dfas.push_back(cursor->tmpdb_.serialize("main"));
 
   return cursor->tmpdb_.prepare(R"SQL(
 
@@ -606,6 +700,110 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
       ) as dfa_transitions,
       ?1
 
-  )SQL").execute(nullptr, no_incoming, no_outgoing, nfa_transitions, state_limit_int, fill_int, incomplete);
+  )SQL").execute(memory_->dfas.size(), no_incoming, no_outgoing, nfa_transitions, state_limit_int, fill_int, incomplete);
 
+}
+
+vt_dfa_view::cursor::cursor(vt_dfa_view* vtab) {
+}
+
+bool
+vt_dfa_view::xBestIndex(fl::vtab::index_info& info)
+{
+  info.mark_wanted("ptr", SQLITE_INDEX_CONSTRAINT_IS);
+  info.mark_wanted("dfa_id", SQLITE_INDEX_CONSTRAINT_EQ);
+
+  auto&& ptr = info.get("ptr", SQLITE_INDEX_CONSTRAINT_IS);
+  auto&& dfa_id = info.get("dfa_id", SQLITE_INDEX_CONSTRAINT_EQ);
+
+  if (!ptr && !dfa_id) {
+    return false;
+  }
+
+  return true;
+}
+
+
+void
+vt_dfa_view::xDisconnect(bool destroy) {
+
+  if (memory_) {
+    memory_->rc--;
+
+    if (memory_->rc <= 0) {
+      delete memory_;
+    }
+  }
+
+}
+
+void
+vt_dfa_view::xConnect(bool create)
+{
+
+  vt_dfa::cursor dfa_cursor(nullptr);
+
+  std::stringstream ss;
+
+  fl::error::raise_if(arguments().size() != 1, "fl_dfa_view needs exactly 1 argument");
+
+  auto which = arguments().front();
+
+  ss << "create table fl_dfa_view(\n";
+  ss << "dfa_id INT HIDDEN,\n";
+  ss << "ptr INT HIDDEN,\n";
+
+  for (auto&& row : fl::pragma::table_xinfo(dfa_cursor.tmpdb_, which)) {
+    ss << fl::detail::quote_identifier(row.name);
+    ss << ",\n";
+  }
+
+  ss.seekp(-2, ss.cur);
+  ss << "\n)";
+
+  declare(ss.str());
+}
+
+fl::stmt
+vt_dfa_view::xFilter(const fl::vtab::index_info& info, cursor* cursor)
+{
+
+  auto ptr_is = info.get("ptr", SQLITE_INDEX_CONSTRAINT_IS);
+
+  if (nullptr != ptr_is) {
+
+    auto ptr = fl::api(sqlite3_value_pointer,
+                       db_.get(),
+                       ptr_is->current_raw,
+                       "vt_dfa_view:ptr");
+
+    fl::error::raise_if(nullptr == ptr, "invalid pointer");
+
+    memory_ = static_cast<vt_dfa::ref_counted_memory*>(ptr);
+
+    memory_->rc++;
+
+    // NOTE: needs to cover worst case number of columns
+    return db().prepare("select null, null, null, null, null, null, null where false").execute();
+  }
+
+  // TODO: Could be nice and support unconstrained dfa_id.
+
+  auto dfa_id_eq = info.get("dfa_id", SQLITE_INDEX_CONSTRAINT_EQ);
+  auto dfa_id = std::get<fl::value::integer>(dfa_id_eq->current_value.value());
+
+  fl::error::raise_if(nullptr == memory_, "not initialized");
+
+  fl::error::raise_if(
+    dfa_id.value < 1 || fl::detail::safe_to<size_t>(dfa_id.value - 1) >= memory_->dfas.size(),
+    "no such dfa");
+
+  fl::db db(":memory:");
+  db.deserialize("main", memory_->dfas[dfa_id.value - 1], SQLITE_DESERIALIZE_READONLY);
+
+  auto stmt = db
+    .prepare("select ?1, null, * from " + fl::detail::quote_identifier(arguments().front()))
+    .execute(dfa_id.value);
+
+  return stmt;
 }

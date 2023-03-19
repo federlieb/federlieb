@@ -62,6 +62,7 @@ extern "C"
       vt_json_each::register_module(ours);
       vt_script::register_module(ours);
       vt_dfa::register_module(ours);
+      vt_dfa_view::register_module(ours);
       vt_articulation_points::register_module(ours);
       vt_biconnected_components::register_module(ours);
       vt_miniucd::register_module(ours);
