@@ -310,6 +310,18 @@ vt_dfa::cursor::cursor(vt_dfa* vtab) : tmpdb_(":memory:") {
     nfatrans inner join via on via.id = nfatrans.via
   ;
 
+  create view dfastate_nfa as
+  select
+    dfastate.id as dfa_state_id,
+    dfastate.state as dfa_state,
+    nfastate.id as nfa_state_id,
+    nfastate.state as nfa_state
+  from
+    dfastate
+      inner join json_each(dfastate.state) each
+      inner join nfastate on nfastate.id = each.value
+  ;
+
   )SQL");
 
 }
@@ -319,36 +331,20 @@ vt_dfa::xDisconnect(bool destroy) {
 
   if (destroy) {
 
-    db().execute_script(fl::detail::format(R"SQL(
+    for (auto&& name : shadow_tables) {
 
-      drop table if exists {}.{};
-      drop table if exists {}.{};
-      drop table if exists {}.{};
-      drop table if exists {}.{};
-      drop table if exists {}.{};
-      drop table if exists {}.{};
-      drop table if exists {}.{};
-      drop table if exists {}.{};
+      db().execute_script(fl::detail::format(R"SQL(
 
-      )SQL",
-      fl::detail::quote_identifier(schema_name_),
-      fl::detail::quote_identifier(table_name_ + "_dfa"),
-      fl::detail::quote_identifier(schema_name_),
-      fl::detail::quote_identifier(table_name_ + "_nfastate"),
-      fl::detail::quote_identifier(schema_name_),
-      fl::detail::quote_identifier(table_name_ + "_dfastate"),
-      fl::detail::quote_identifier(schema_name_),
-      fl::detail::quote_identifier(table_name_ + "_nfatrans"),
-      fl::detail::quote_identifier(schema_name_),
-      fl::detail::quote_identifier(table_name_ + "_dfatrans"),
-      fl::detail::quote_identifier(schema_name_),
-      fl::detail::quote_identifier(table_name_ + "_via"),
-      fl::detail::quote_identifier(schema_name_),
-      fl::detail::quote_identifier(table_name_ + "_nfatrans_via"),
-      fl::detail::quote_identifier(schema_name_),
-      fl::detail::quote_identifier(table_name_ + "_dfatrans_via")
-      )
-    );
+        drop table if exists {}.{};
+
+        )SQL",
+        fl::detail::quote_identifier(schema_name_),
+        fl::detail::quote_identifier(table_name_ + "_" + name)
+        )
+      );
+
+    }
+
   }
 
   const std::lock_guard<std::mutex> lock(g_mutex);
@@ -384,71 +380,30 @@ vt_dfa::xConnect(bool create)
 
   memory_ = new ref_counted_memory;
 
-  db().execute_script(fl::detail::format(R"SQL(
+  for (auto&& name : shadow_tables) {
+    db().execute_script(fl::detail::format(R"SQL(
 
-    create virtual table if not exists {}.{} using fl_dfa_view(dfa);
-    create virtual table if not exists {}.{} using fl_dfa_view(nfastate);
-    create virtual table if not exists {}.{} using fl_dfa_view(dfastate);
-    create virtual table if not exists {}.{} using fl_dfa_view(nfatrans);
-    create virtual table if not exists {}.{} using fl_dfa_view(dfatrans);
-    create virtual table if not exists {}.{} using fl_dfa_view(via);
-    create virtual table if not exists {}.{} using fl_dfa_view(nfatrans_via);
-    create virtual table if not exists {}.{} using fl_dfa_view(dfatrans_via);
+      create virtual table if not exists {}.{} using fl_dfa_view({});
 
-    )SQL",
-    fl::detail::quote_identifier(schema_name_),
-    fl::detail::quote_identifier(table_name_ + "_dfa"),
-    fl::detail::quote_identifier(schema_name_),
-    fl::detail::quote_identifier(table_name_ + "_nfastate"),
-    fl::detail::quote_identifier(schema_name_),
-    fl::detail::quote_identifier(table_name_ + "_dfastate"),
-    fl::detail::quote_identifier(schema_name_),
-    fl::detail::quote_identifier(table_name_ + "_nfatrans"),
-    fl::detail::quote_identifier(schema_name_),
-    fl::detail::quote_identifier(table_name_ + "_dfatrans"),
-    fl::detail::quote_identifier(schema_name_),
-    fl::detail::quote_identifier(table_name_ + "_via"),
-    fl::detail::quote_identifier(schema_name_),
-    fl::detail::quote_identifier(table_name_ + "_nfatrans_via"),
-    fl::detail::quote_identifier(schema_name_),
-    fl::detail::quote_identifier(table_name_ + "_dfatrans_via")
-    )
-  );
+      )SQL", 
+      fl::detail::quote_identifier(schema_name_),
+      fl::detail::quote_identifier(table_name_ + "_" + name),
+      name
+    ));
 
-  auto connect_stmt = db().prepare(fl::detail::format(R"SQL(
-    select
-      (select 0 from {}.{} where ptr is :ptr and dfa_id = -1),
-      (select 1 from {}.{} where ptr is :ptr and dfa_id = -1),
-      (select 2 from {}.{} where ptr is :ptr and dfa_id = -1),
-      (select 3 from {}.{} where ptr is :ptr and dfa_id = -1),
-      (select 4 from {}.{} where ptr is :ptr and dfa_id = -1),
-      (select 5 from {}.{} where ptr is :ptr and dfa_id = -1),
-      (select 6 from {}.{} where ptr is :ptr and dfa_id = -1),
-      (select 7 from {}.{} where ptr is :ptr and dfa_id = -1)
-    )SQL",
-    fl::detail::quote_identifier(schema_name_),
-    fl::detail::quote_identifier(table_name_ + "_dfa"),
-    fl::detail::quote_identifier(schema_name_),
-    fl::detail::quote_identifier(table_name_ + "_nfastate"),
-    fl::detail::quote_identifier(schema_name_),
-    fl::detail::quote_identifier(table_name_ + "_dfastate"),
-    fl::detail::quote_identifier(schema_name_),
-    fl::detail::quote_identifier(table_name_ + "_nfatrans"),
-    fl::detail::quote_identifier(schema_name_),
-    fl::detail::quote_identifier(table_name_ + "_dfatrans"),
-    fl::detail::quote_identifier(schema_name_),
-    fl::detail::quote_identifier(table_name_ + "_via"),
-    fl::detail::quote_identifier(schema_name_),
-    fl::detail::quote_identifier(table_name_ + "_nfatrans_via"),
-    fl::detail::quote_identifier(schema_name_),
-    fl::detail::quote_identifier(table_name_ + "_dfatrans_via")
-    )
-  );
+    db()
+      .prepare(fl::detail::format(R"SQL(
 
-  connect_stmt.bind_pointer(":ptr", "vt_dfa_view:ptr", static_cast<void*>(memory_));
+        select 1 from {}.{} where ptr is :ptr and dfa_id = -1
 
-  for (auto&& row : connect_stmt.execute()) {
-    /**/
+        )SQL",
+        fl::detail::quote_identifier(schema_name_),
+        fl::detail::quote_identifier(table_name_ + "_" + name)
+
+      ))
+      .bind_pointer(":ptr", "vt_dfa_view:ptr", static_cast<void*>(memory_))
+      .execute();
+
   }
 
 }
@@ -462,6 +417,8 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
   auto& no_outgoing = info.columns[2].constraints[0].current_value.value();
   auto& nfa_transitions = info.columns[3].constraints[0].current_value.value();
   // auto& state_limit = info.columns[4].constraints[0].current_value;
+
+  // TODO: make no_outgoing default to empty json array and make it optional
 
   auto state_limit = info.get("state_limit", SQLITE_INDEX_CONSTRAINT_EQ);
   auto fill = info.get("fill", SQLITE_INDEX_CONSTRAINT_EQ);
@@ -731,6 +688,7 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
       !incomplete, state_limit_int, fill_int, start_id, dead_id
     );
 
+    cursor->tmpdb_.execute_script("analyze");
     memory_->dfas.push_back(cursor->tmpdb_.serialize("main"));
 
   }
@@ -779,6 +737,8 @@ vt_dfa_view::xBestIndex(fl::vtab::index_info& info)
   if (!ptr && !dfa_id) {
     return false;
   }
+
+  // TODO: provide row count estimates
 
   return true;
 }
@@ -863,8 +823,12 @@ vt_dfa_view::xFilter(const fl::vtab::index_info& info, cursor* cursor)
   fl::db db(":memory:");
   db.deserialize("main", memory_->dfas[dfa_id.value - 1], SQLITE_DESERIALIZE_READONLY);
 
+  auto query = "select ?1, null, * from " + fl::detail::quote_identifier(arguments().front());
+
+  // TODO: could add constraints
+
   auto stmt = db
-    .prepare("select ?1, null, * from " + fl::detail::quote_identifier(arguments().front()))
+    .prepare(query)
     .execute(dfa_id.value);
 
   return stmt;

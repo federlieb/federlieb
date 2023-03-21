@@ -32,6 +32,12 @@ public:
   };
 
   ref_counted_memory* memory_ = nullptr;
+
+  static inline std::array<std::string, 8> shadow_tables = {
+    "dfa", "nfastate", "dfastate", "nfatrans",
+    "dfatrans", "via", "nfatrans_via", "dfatrans_via"
+  };
+
 };
 
 class vt_dfa_view

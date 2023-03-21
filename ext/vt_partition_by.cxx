@@ -2,6 +2,11 @@
 
 namespace fl = ::federlieb;
 
+// TODO: This probably needs to handle in a better way attempts to use the
+// result of the partitioning in a JOIN query from the outside. As it is,
+// xFilter does not materialize the result before it returns a range to it,
+// but SQLite might xFilter again in the meantime.
+
 void
 vt_partition_by::xConnect(bool create)
 {
