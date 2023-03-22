@@ -104,13 +104,6 @@ fl::context::result(const fl::value::text& v)
 }
 
 void
-fl::context::result(const fl::value::json& v)
-{
-  result(fl::value::text{ v.value });
-  fl::api(sqlite3_result_subtype, db_, ctx_, 'J');
-}
-
-void
 fl::context::result(const fl::value::integer& v)
 {
   fl::api(sqlite3_result_int64, db_, ctx_, v.value);

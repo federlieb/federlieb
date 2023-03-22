@@ -78,6 +78,8 @@ regex_split(const std::string& s,
 std::string
 type_string_to_affinity(const std::string& s);
 
+std::string extract_query(const std::string s);
+
 template<typename T = std::string>
 auto
 suffix(const T& suffix)

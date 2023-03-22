@@ -43,14 +43,6 @@ fl::vtab::to_sql(const fl::value::text& v)
 }
 
 std::string
-fl::vtab::to_sql(const fl::value::json& v)
-{
-  std::stringstream ss;
-  ss << std::quoted(v.value, '\'', '\'');
-  return ss.str();
-}
-
-std::string
 fl::vtab::to_sql(const fl::value::blob& v)
 {
   std::string out;

@@ -7,11 +7,6 @@
 
 namespace fl = ::federlieb;
 
-fl::value::json::operator fl::value::text()
-{
-  return fl::value::text{ value };
-}
-
 std::ostream&
 fl::value::operator<<(std::ostream& os, const fl::value::real& v)
 {
@@ -99,9 +94,6 @@ fl::value::from(sqlite3_value* value)
       fl::error::raise_if(nullptr == data, "allocation problem");
       auto length = sqlite3_value_bytes(value);
       auto str = std::string(reinterpret_cast<const char*>(data), length);
-      if ('J' == sqlite3_value_subtype(value)) {
-        return fl::value::json{ str };
-      }
       return fl::value::text{ str };
     }
     case SQLITE_BLOB: {

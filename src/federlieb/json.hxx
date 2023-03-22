@@ -48,10 +48,6 @@ tag_invoke(const boost::json::value_from_tag&,
 void
 tag_invoke(const boost::json::value_from_tag&,
            boost::json::value& theirs,
-           const fl::value::json& ours);
-void
-tag_invoke(const boost::json::value_from_tag&,
-           boost::json::value& theirs,
            const fl::value::blob& ours);
 void
 tag_invoke(const boost::json::value_from_tag&,

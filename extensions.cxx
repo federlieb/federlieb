@@ -16,6 +16,7 @@ extern "C"
 #include "ext/fx_infinity.hxx"
 #include "ext/fx_statistics.hxx"
 #include "ext/fx_only_value.hxx"
+#include "ext/fx_bits.hxx"
 
 #include "ext/vt_contraction.hxx"
 #include "ext/vt_dominator_tree.hxx"
@@ -63,6 +64,8 @@ extern "C"
       vt_script::register_module(ours);
       vt_dfa::register_module(ours);
       vt_dfa_view::register_module(ours);
+      vt_dfastate_subset::register_module(ours);
+
       vt_articulation_points::register_module(ours);
       vt_biconnected_components::register_module(ours);
       vt_miniucd::register_module(ours);
@@ -92,6 +95,7 @@ extern "C"
       fx_median_p2q::register_function(ours);
       fx_variance::register_function(ours);
       fx_utf8_parts::register_function(ours);
+      fx_bit_ceil::register_function(ours);
 
     } catch (...) {
       return SQLITE_ERROR;

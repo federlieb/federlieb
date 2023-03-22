@@ -51,8 +51,6 @@ vt_json_each::xFilter(const fl::vtab::index_info& info, cursor* cursor)
     std::copy(blob.begin(), blob.end(), source);
     array = boost::json::parse(source).as_array();
 #endif
-  } else if (std::holds_alternative<fl::value::json>(source_variant)) {
-    array = boost::json::parse(std::get<fl::value::json>(source_variant).value).as_array();
   } else {
     fl::error::raise("bad source");
   }

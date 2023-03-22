@@ -55,3 +55,19 @@ fl::detail::type_string_to_affinity(const std::string& s)
     fl::error::raise("impossible");
   }
 }
+
+std::string
+fl::detail::extract_query(const std::string s) {
+
+  auto ws = "\r\n\t ";
+
+  auto&& oppos = s.find_first_not_of(ws);
+  auto&& cppos = s.find_last_not_of(ws);
+
+  bool found = (std::string::npos != cppos && std::string::npos != cppos);
+
+  fl::error::raise_if(!found, "expecting (SQL)");
+
+  return s.substr(oppos + 1, cppos - oppos - 1);
+
+}

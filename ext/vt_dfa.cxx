@@ -13,20 +13,20 @@ static std::mutex g_mutex;
 // TODO: there is still a bug here where the helper generates transitions for
 // via=0 and dst=0.
 
+template<typename T, typename E>
+void insert_at(T& vec, size_t pos, E element) {
+  if (vec.size() <= pos) {
+    vec.resize( (pos + 1) * 2 );
+  }
+  vec[pos] = element;
+}
+
 struct helper {
 
     using nfastate = uint32_t;
     using dfastate = uint32_t;
     using via = uint32_t;
     using viadst = uint64_t;
-
-    template<typename T, typename E>
-    void insert_at(T& vec, size_t pos, E element) {
-      if (vec.size() <= pos) {
-        vec.resize( (pos + 1) * 2 );
-      }
-      vec[pos] = element;
-    }
 
     helper(fl::db& db) {
 
@@ -269,6 +269,13 @@ vt_dfa::cursor::cursor(vt_dfa* vtab) : tmpdb_(":memory:") {
       (select id from nfastate where state is NEW.dst);
   end;
 
+  create table if not exists dfastate(
+    id integer primary key,
+    state any [blob],
+    round int,
+    unique(state)
+  );
+
   create table if not exists dfatrans(
     id integer primary key,
     src int,
@@ -277,13 +284,6 @@ vt_dfa::cursor::cursor(vt_dfa* vtab) : tmpdb_(":memory:") {
     -- This is true, but no need to make SQLite check for it
     -- , unique(src,via,dst)
     -- , unique(via,src,dst)
-  );
-
-  create table if not exists dfastate(
-    id integer primary key,
-    state any [blob],
-    round int,
-    unique(state)
   );
 
   create index if not exists idx_dfastate_round on dfastate(round);
@@ -331,7 +331,9 @@ vt_dfa::xDisconnect(bool destroy) {
 
   if (destroy) {
 
-    for (auto&& name : shadow_tables) {
+    for (auto&& shadow_table : shadow_tables) {
+
+      auto name = shadow_table.first;
 
       db().execute_script(fl::detail::format(R"SQL(
 
@@ -380,14 +382,18 @@ vt_dfa::xConnect(bool create)
 
   memory_ = new ref_counted_memory;
 
-  for (auto&& name : shadow_tables) {
+  for (auto&& shadow_table : shadow_tables) {
+
+    auto name = shadow_table.first;
+
     db().execute_script(fl::detail::format(R"SQL(
 
-      create virtual table if not exists {}.{} using fl_dfa_view({});
+      create virtual table if not exists {}.{} using {}({});
 
       )SQL", 
       fl::detail::quote_identifier(schema_name_),
       fl::detail::quote_identifier(table_name_ + "_" + name),
+      shadow_table.second,
       name
     ));
 
@@ -786,6 +792,20 @@ vt_dfa_view::xConnect(bool create)
   declare(ss.str());
 }
 
+vt_dfa::ref_counted_memory*
+recall(std::shared_ptr<sqlite3> db, const fl::vtab::constraint_info* ptr_is) {
+
+
+    auto ptr = fl::api(sqlite3_value_pointer,
+                       db.get(),
+                       ptr_is->current_raw,
+                       "vt_dfa_view:ptr");
+
+    fl::error::raise_if(nullptr == ptr, "invalid pointer");
+
+    return static_cast<vt_dfa::ref_counted_memory*>(ptr);
+}
+
 fl::stmt
 vt_dfa_view::xFilter(const fl::vtab::index_info& info, cursor* cursor)
 {
@@ -794,15 +814,9 @@ vt_dfa_view::xFilter(const fl::vtab::index_info& info, cursor* cursor)
 
   if (nullptr != ptr_is) {
 
-    auto ptr = fl::api(sqlite3_value_pointer,
-                       db_.get(),
-                       ptr_is->current_raw,
-                       "vt_dfa_view:ptr");
+    const std::lock_guard<std::mutex> lock(g_mutex);
 
-    fl::error::raise_if(nullptr == ptr, "invalid pointer");
-
-    memory_ = static_cast<vt_dfa::ref_counted_memory*>(ptr);
-
+    memory_ = recall(db_, ptr_is);
     memory_->rc++;
 
     // NOTE: needs to cover worst case number of columns
@@ -833,3 +847,160 @@ vt_dfa_view::xFilter(const fl::vtab::index_info& info, cursor* cursor)
 
   return stmt;
 }
+
+vt_dfastate_subset::cursor::cursor(vt_dfastate_subset* vtab) {
+}
+
+bool
+vt_dfastate_subset::xBestIndex(fl::vtab::index_info& info)
+{
+  info.mark_wanted("ptr", SQLITE_INDEX_CONSTRAINT_IS);
+  info.mark_wanted("dfa_id", SQLITE_INDEX_CONSTRAINT_EQ);
+
+  info.mark_wanted("by_ids", SQLITE_INDEX_CONSTRAINT_EQ);
+  info.mark_wanted("by_states", SQLITE_INDEX_CONSTRAINT_EQ);
+
+  auto&& ptr = info.get("ptr", SQLITE_INDEX_CONSTRAINT_IS);
+  auto&& dfa_id = info.get("dfa_id", SQLITE_INDEX_CONSTRAINT_EQ);
+
+  if (!ptr && !dfa_id) {
+    return false;
+  }
+
+  // TODO: provide row count estimates?
+
+  return true;
+}
+
+void
+vt_dfastate_subset::xDisconnect(bool destroy) {
+
+  const std::lock_guard<std::mutex> lock(g_mutex);
+
+  if (memory_) {
+    memory_->rc--;
+
+    if (memory_->rc <= 0) {
+      delete memory_;
+    }
+  }
+
+}
+
+void
+vt_dfastate_subset::xConnect(bool create)
+{
+  declare(R"SQL(
+
+    create table fl_dfastate_subset(
+      dfa_id INT HIDDEN,
+      ptr INT HIDDEN,
+      by_ids any [blob] HIDDEN,
+      by_states any [blob] HIDDEN,
+      state any [blob]
+    )
+
+  )SQL");
+}
+
+vt_dfastate_subset::result_type
+vt_dfastate_subset::xFilter(const fl::vtab::index_info& info, cursor* cursor)
+{
+  auto ptr_is = info.get("ptr", SQLITE_INDEX_CONSTRAINT_IS);
+
+  if (nullptr != ptr_is) {
+
+    const std::lock_guard<std::mutex> lock(g_mutex);
+    memory_ = recall(db_, ptr_is);
+    memory_->rc++;
+
+    return {};
+  }
+
+  // TODO: Could be nice and support unconstrained dfa_id.
+
+  auto dfa_id_eq = info.get("dfa_id", SQLITE_INDEX_CONSTRAINT_EQ);
+  auto dfa_id = std::get<fl::value::integer>(dfa_id_eq->current_value.value());
+
+  fl::error::raise_if(nullptr == memory_, "not initialized");
+
+  fl::error::raise_if(
+    dfa_id.value < 1 || fl::detail::safe_to<size_t>(dfa_id.value - 1) >= memory_->dfas.size(),
+    "no such dfa");
+
+  fl::db tmp(":memory:");
+  tmp.deserialize("main", memory_->dfas[dfa_id.value - 1], SQLITE_DESERIALIZE_READONLY);
+
+  struct dfastate {
+    std::string state;
+  };
+
+  auto by_ids_eq = info.get("by_ids", SQLITE_INDEX_CONSTRAINT_EQ);
+  auto by_states_eq = info.get("by_states", SQLITE_INDEX_CONSTRAINT_EQ);
+
+  boost::json::array subset;
+
+  fl::value::variant subset_json;
+
+  if (nullptr != by_ids_eq) {
+    subset_json = by_ids_eq->current_value.value();
+  }
+
+  if (nullptr != by_states_eq) {
+
+    subset_json = tmp.prepare(R"SQL(
+
+      select
+        json_group_array(id)
+      from
+        nfastate
+      where
+        state in (select value from json_each(?1))
+      group by
+        null
+
+    )SQL").execute(by_states_eq->current_value.value()).current_row().at(0).to_variant();
+  }
+
+  subset = boost::json::parse(std::get<fl::value::text>(subset_json).value).as_array();
+
+  fl::json::toset(subset);
+
+  boost::unordered_set<std::string> seen;
+
+  result_type result;
+
+  auto state_stmt = tmp.prepare("select state from dfastate").execute();
+
+  for (auto&& row : state_stmt | fl::as<dfastate>()) {
+    auto sv = boost::json::parse(row.state).as_array();
+
+    auto intersected = boost::json::array();
+
+    std::ranges::set_intersection(
+      sv, subset, std::back_inserter(intersected), fl::json::less{});
+
+    std::string s = boost::json::serialize(intersected);
+
+    if (seen.contains(s)) {
+      continue;
+    }
+
+    seen.insert(s);
+
+    result.push_back({
+      dfa_id,
+      fl::value::null{},
+      ( by_ids_eq ? by_ids_eq->current_value.value() : fl::value::null{} ),
+      ( by_states_eq ? by_states_eq->current_value.value() : fl::value::null{} ),
+      fl::value::text{ s }
+    });
+
+
+  }
+
+  return result;
+
+}
+
+

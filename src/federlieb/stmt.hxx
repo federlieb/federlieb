@@ -82,7 +82,6 @@ public:
   fl::stmt& bind(int const col, const nullptr_t& v);
   fl::stmt& bind(int const col, const fl::value::blob& v);
   fl::stmt& bind(int const col, const fl::value::text& v);
-  fl::stmt& bind(int const col, const fl::value::json& v);
   fl::stmt& bind(int const col, const fl::value::integer& v);
   fl::stmt& bind(int const col, const fl::value::real& v);
   fl::stmt& bind(int const col, const fl::value::null& v);

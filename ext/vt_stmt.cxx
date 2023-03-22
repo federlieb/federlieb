@@ -286,6 +286,10 @@ vt_stmt::xConnect(bool const create)
 
   fl::error::raise_if(args.empty(), "missing argument");
 
+  // If the statement does not have bind parameters, xBestIndex would materialize
+  // the statement. But in order to read out the column names from the statement,
+  // it has to be prepared, which does trigger xBestIndex. So while we just want
+  // the column names, disable materialization in xBestIndex in this scope.
   guard g;
 
   auto stmt = db().prepare("SELECT * FROM " + args.front());
@@ -309,6 +313,31 @@ vt_stmt::xConnect(bool const create)
     "CREATE TABLE fl_stmt(" + boost::algorithm::join(column_defs, ", ") + ")";
 
   cache_ = init_cache(stmt);
+
+  auto view_prefix = kwarg("view_prefix").value_or("");
+
+  if (view_prefix != "") {
+
+    fl::error::raise_if(!table_name_.starts_with(view_prefix), "bad view_prefix");
+
+    std::string view_name = table_name_.substr(view_prefix.size());
+
+    db().execute_script(fl::detail::format(R"SQL(
+
+      drop view if exists {}.{};
+      create view {}.{} as
+      {}
+      ;
+
+      )SQL",
+      fl::detail::quote_identifier(schema_name_),
+      fl::detail::quote_identifier(view_name),
+      fl::detail::quote_identifier(schema_name_),
+      fl::detail::quote_identifier(view_name),
+      fl::detail::extract_query( args.front() )
+    ));
+
+  }
 
   declare(create_table_sql);
 }

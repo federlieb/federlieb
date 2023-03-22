@@ -69,12 +69,6 @@ fl::stmt::bind(int const col, const fl::value::text& v)
 }
 
 fl::stmt&
-fl::stmt::bind(int const col, const fl::value::json& v)
-{
-  return bind(col, fl::value::text{ v.value });
-}
-
-fl::stmt&
 fl::stmt::bind(int const col, const fl::value::integer& v)
 {
   fl::api(sqlite3_bind_int64, { SQLITE_OK }, db(), stmt_.get(), col, v.value);

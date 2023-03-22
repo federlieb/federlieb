@@ -34,7 +34,6 @@ public:
   void result(const nullptr_t& v);
   void result(const fl::value::blob& v);
   void result(const fl::value::text& v);
-  void result(const fl::value::json& v);
   void result(const fl::value::integer& v);
   void result(const fl::value::real& v);
   void result(const fl::value::null& v);

@@ -39,14 +39,6 @@ fl::value::tag_invoke(const boost::json::value_from_tag&,
 void
 fl::value::tag_invoke(const boost::json::value_from_tag&,
                       boost::json::value& theirs,
-                      const fl::value::json& ours)
-{
-  theirs = boost::json::parse(ours.value);
-}
-
-void
-fl::value::tag_invoke(const boost::json::value_from_tag&,
-                      boost::json::value& theirs,
                       const fl::value::blob& ours)
 {
   fl::error::raise("BLOBs cannot be converted to JSON");

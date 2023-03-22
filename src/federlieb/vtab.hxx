@@ -88,9 +88,6 @@ std::string
 to_sql(const fl::value::text& v);
 
 std::string
-to_sql(const fl::value::json& v);
-
-std::string
 to_sql(const fl::value::blob& v);
 
 std::string

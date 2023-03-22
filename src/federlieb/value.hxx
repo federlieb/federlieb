@@ -42,13 +42,6 @@ struct text
   std::strong_ordering operator<=>(const text&) const = default;
 };
 
-struct json
-{
-  std::string value;
-  std::strong_ordering operator<=>(const json&) const = default;
-  operator fl::value::text();
-};
-
 std::ostream&
 operator<<(std::ostream& os, const real& v);
 
@@ -64,7 +57,7 @@ operator<<(std::ostream& os, const null& v);
 std::ostream&
 operator<<(std::ostream& os, const blob& v);
 
-using variant = std::variant<null, integer, real, text, blob, json>;
+using variant = std::variant<null, integer, real, text, blob>;
 
 template<std::integral T>
 inline variant
