@@ -542,6 +542,9 @@ public:
       } catch (const fl::error::interrupted& e) {
         return SQLITE_INTERRUPT;
       } catch (...) {
+        // FIXME: debugging...
+        auto p = unbox(c);
+        std::cerr << "fatal error in xFilter " << p.vtab->table_name_ << std::endl;
         return SQLITE_INTERNAL;
       }
 

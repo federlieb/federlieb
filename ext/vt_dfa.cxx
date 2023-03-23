@@ -867,6 +867,13 @@ vt_dfastate_subset::xBestIndex(fl::vtab::index_info& info)
     return false;
   }
 
+  auto&& by_ids = info.get("by_ids", SQLITE_INDEX_CONSTRAINT_EQ);
+  auto&& by_states = info.get("by_states", SQLITE_INDEX_CONSTRAINT_EQ);
+
+//  if (dfa_id && !(by_ids || by_states)) {
+//    return false;
+//  }
+
   // TODO: provide row count estimates?
 
   return true;

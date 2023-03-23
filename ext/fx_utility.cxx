@@ -1,6 +1,6 @@
 #include "federlieb/federlieb.hxx"
 
-#include "fx_infinity.hxx"
+#include "fx_utility.hxx"
 
 namespace fl = ::federlieb;
 

@@ -153,7 +153,7 @@ vt_partition_by::project(const std::string& sql,
       WITH
       {} AS MATERIALIZED (
         SELECT
-          element, current
+          element, current, round
         FROM
           {}.{}
         WHERE
@@ -203,7 +203,7 @@ vt_partition_by::validate_projections()
 
         auto stmt = db().prepare(fl::detail::format(
           R"SQL(
-              WITH {} AS (SELECT 1 AS element, 1 AS current)
+              WITH {} AS (SELECT 1 AS element, 1 AS current, 1 as round)
               SELECT * FROM {}
             )SQL",
           fl::detail::quote_identifier(table_name_),
@@ -237,6 +237,11 @@ vt_partition_by::apply_then_bys(vt_partition_by::cursor* cursor)
                           }));
 
   while (true) {
+
+    if (db().is_interrupted()) {
+      throw fl::error::interrupted{};
+    }
+
     auto before = cursor->tmpdb_.select_scalar(
       "SELECT COUNT(DISTINCT representative) FROM tracking");
 
@@ -348,8 +353,19 @@ vt_partition_by::xFilter(const fl::vtab::index_info& info, cursor* cursor)
     .prepare("INSERT INTO tracking(element) VALUES(?1)")
     .executemany(elements_stmt);
 
+  cursor
+    ->tmpdb_ //
+    .execute_script(R"SQL(
+
+      update tracking set representative = (select min(element) from tracking)
+
+    )SQL");
+
   apply_once_bys(cursor);
   apply_then_bys(cursor);
+
+  std::remove("debug.sqlite");
+  cursor->tmpdb_.execute_script("vacuum into 'debug.sqlite'");
 
   auto history_eq = info.get("history", SQLITE_INDEX_CONSTRAINT_EQ);
 

@@ -50,7 +50,7 @@ api(F f, std::initializer_list<T> expected_codes, sqlite3* db, Args... args)
   if (!ok) [[unlikely]] {
     if (nullptr != db) {
       auto message = sqlite3_errmsg(db);
-      std::cerr << message << std::endl;
+      std::cerr << message << " code " << result << std::endl;
     }
 
     if (use_mutex) {
