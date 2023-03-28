@@ -35,6 +35,7 @@ extern "C"
 #include "ext/vt_biconnected_components.hxx"
 #include "ext/vt_miniucd.hxx"
 #include "ext/vt_colormap.hxx"
+#include "ext/vt_bfs.hxx"
 
 extern "C"
 {
@@ -70,6 +71,7 @@ extern "C"
       vt_biconnected_components::register_module(ours);
       vt_miniucd::register_module(ours);
       vt_colormap::register_module(ours);
+      vt_breadth_first_search::register_module(ours);
 
       fx_toset::register_function(ours);
       fx_toset_agg::register_function(ours);

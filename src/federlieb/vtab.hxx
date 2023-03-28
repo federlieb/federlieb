@@ -641,12 +641,17 @@ public:
          const char* zName,
          void (**pxFunc)(sqlite3_context*, int, sqlite3_value**),
          void** ppArg) noexcept { return SQLITE_OK; };
+#endif
 
+#if 0
     module.xUpdate = [](sqlite3_vtab* pVtab,
                         int argc,
                         sqlite3_value** argv,
                         sqlite_int64* pRowid) noexcept {
       try {
+
+        // TODO: This ought to forward the xUpdate.
+
         if (argc == 1 && argv[0] != nullptr) {
           // DELETE
         } else if (argc > 1 && argv[0] == nullptr) {
@@ -668,30 +673,148 @@ public:
     };
 #endif
 
+#if 1
+
+    module.xBegin = [](sqlite3_vtab* pVTab) noexcept {
+
+      try {
+        auto p = unbox(pVTab);
+
+        if constexpr (requires { p.vtab->xBegin(); }) {
+          p.vtab->xBegin();
+        }
+
+      } catch (std::bad_alloc const& e) {
+        return SQLITE_NOMEM;
+      } catch (...) {
+        return SQLITE_INTERNAL;
+      }
+
+      return SQLITE_OK;
+
+    };
+
+    module.xSync = [](sqlite3_vtab* pVTab) noexcept {
+
+      try {
+        auto p = unbox(pVTab);
+
+        if constexpr (requires { p.vtab->xSync(); }) {
+          p.vtab->xSync();
+        }
+
+      } catch (std::bad_alloc const& e) {
+        return SQLITE_NOMEM;
+      } catch (...) {
+        return SQLITE_INTERNAL;
+      }
+
+      return SQLITE_OK;
+
+    };
+
+    module.xCommit = [](sqlite3_vtab* pVTab) noexcept {
+
+      try {
+        auto p = unbox(pVTab);
+
+        if constexpr (requires { p.vtab->xCommit(); }) {
+          p.vtab->xCommit();
+        }
+
+      } catch (std::bad_alloc const& e) {
+        return SQLITE_NOMEM;
+      } catch (...) {
+        return SQLITE_INTERNAL;
+      }
+
+      return SQLITE_OK;
+
+    };
+
+    module.xRollback = [](sqlite3_vtab* pVTab) noexcept {
+
+      try {
+        auto p = unbox(pVTab);
+
+        if constexpr (requires { p.vtab->xRollback(); }) {
+          p.vtab->xRollback();
+        }
+
+      } catch (std::bad_alloc const& e) {
+        return SQLITE_NOMEM;
+      } catch (...) {
+        return SQLITE_INTERNAL;
+      }
+
+      return SQLITE_OK;
+
+    };
+
 #if 0
-    module.xBegin = [](sqlite3_vtab* pVTab) noexcept { return SQLITE_OK; };
-
-    module.xSync = [](sqlite3_vtab* pVTab) noexcept { return SQLITE_OK; };
-
-    module.xCommit = [](sqlite3_vtab* pVTab) noexcept { return SQLITE_OK; };
-
-    module.xRollback = [](sqlite3_vtab* pVTab) noexcept { return SQLITE_OK; };
-
     module.xRename = [](sqlite3_vtab* pVTab, const char* zNew) noexcept {
       return SQLITE_OK;
     };
+#endif
 
     module.xSavepoint = [](sqlite3_vtab* pVTab, int iSavepoint) noexcept {
+
+      try {
+        auto p = unbox(pVTab);
+
+        if constexpr (requires { p.vtab->xSavepoint(iSavepoint); }) {
+          p.vtab->xSavepoint(iSavepoint);
+        }
+
+      } catch (std::bad_alloc const& e) {
+        return SQLITE_NOMEM;
+      } catch (...) {
+        return SQLITE_INTERNAL;
+      }
+
       return SQLITE_OK;
     };
 
     module.xRelease = [](sqlite3_vtab* pVTab, int iSavepoint) noexcept {
+
+      try {
+        auto p = unbox(pVTab);
+
+        if constexpr (requires { p.vtab->xRelease(iSavepoint); }) {
+          p.vtab->xRelease(iSavepoint);
+        }
+
+      } catch (std::bad_alloc const& e) {
+        return SQLITE_NOMEM;
+      } catch (...) {
+        return SQLITE_INTERNAL;
+      }
+
       return SQLITE_OK;
     };
 
     module.xRollbackTo = [](sqlite3_vtab* pVTab, int iSavepoint) noexcept {
+
+      try {
+        auto p = unbox(pVTab);
+
+        if constexpr (requires { p.vtab->xRollbackTo(iSavepoint); }) {
+          p.vtab->xRollbackTo(iSavepoint);
+        }
+
+      } catch (std::bad_alloc const& e) {
+        return SQLITE_NOMEM;
+      } catch (...) {
+        return SQLITE_INTERNAL;
+      }
+
       return SQLITE_OK;
     };
+
+#endif
+
+
+#if 0
 
     module.xShadowName = [](char const* const name) noexcept { return 0; };
 

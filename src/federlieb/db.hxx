@@ -37,6 +37,7 @@ public:
   fl::value::variant select_scalar(const std::string sql);
 
   bool is_interrupted();
+  int txn_state(const std::string schema);
 
   fl::value::blob serialize(const std::string& name);
 

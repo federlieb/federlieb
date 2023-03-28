@@ -30,6 +30,7 @@ public:
     fl::stmt insert_meta_stmt;
     fl::stmt insert_data_stmt;
     fl::stmt update_refcount_stmt;
+    std::string fake_insert_sql;
     std::string select_sql;
     int bind_parameter_count;
 
@@ -56,6 +57,14 @@ public:
   void xDisconnect(bool const destroy);
 
   void xConnect(bool const create);
+
+  void xBegin();
+  void xSync();
+  void xCommit();
+  void xRollback();
+  void xSavepoint(int savepoint);
+  void xRelease(int savepoint);
+  void xRollbackTo(int savepoint);
 
   bool xBestIndex(fl::vtab::index_info& info);
 

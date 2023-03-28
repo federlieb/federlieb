@@ -184,6 +184,10 @@ vt_stmt::init_cache(fl::stmt& stmt)
     std::views::iota(1, 1 + stmt.column_count()) |
     std::views::transform([](auto&& e) { return "?" + std::to_string(e); });
 
+  auto nx =
+    std::views::iota(1, 1 + stmt.column_count() + stmt.bind_parameter_count() - 1) |
+    std::views::transform([](auto&& e) { return std::string("null"); });
+
   auto create_meta_stmt = db.prepare(fl::detail::format(
     R"SQL(
 
@@ -269,9 +273,19 @@ vt_stmt::init_cache(fl::stmt& stmt)
 
     )SQL", table_name_ /* fixme: escape for comment */));
 
+  auto fake_insert_sql = fl::detail::format(R"SQL(
+
+      insert into {}.{} select null {} where false
+ 
+    )SQL",
+    fl::detail::quote_identifier(schema_name_),
+    fl::detail::quote_identifier(table_name_),
+    fl::detail::str(nx | fl::detail::prefix(", "))
+    );
+
   return cache{
-    db, insert_meta_stmt, insert_data_stmt, update_refcount_stmt, select_sql,
-    stmt.bind_parameter_count()
+    db, insert_meta_stmt, insert_data_stmt, update_refcount_stmt,
+    fake_insert_sql, select_sql, stmt.bind_parameter_count()
   };
 }
 
@@ -340,6 +354,46 @@ vt_stmt::xConnect(bool const create)
   }
 
   declare(create_table_sql);
+}
+
+void vt_stmt::xBegin() {
+
+  // NOTE: This should probably only use nested transactions
+
+  // std::cerr << "begin transaction" << " " << table_name_ << std::endl;
+  // cache_->db.execute_script("begin transaction");
+}
+
+void vt_stmt::xSync() {
+  // std::cerr << "xSync" << std::endl;
+}
+
+void vt_stmt::xCommit() {
+  // std::cerr << "commit transaction" << " " << table_name_ << std::endl;
+  // cache_->db.execute_script("commit transaction");
+}
+
+void vt_stmt::xRollback() {
+  // std::cerr << "rollback transaction" << std::endl;
+  // cache_->db.execute_script("rollback transaction");
+}
+
+void vt_stmt::xSavepoint(int savepoint) {
+  // std::cerr << "savepoint" << std::endl;
+  // cache_->db.execute_script(fl::detail::format("savepoint {}",
+  //   fl::detail::quote_identifier(std::to_string(savepoint))));
+}
+
+void vt_stmt::xRelease(int savepoint) {
+  // std::cerr << "release" << std::endl;
+  // cache_->db.execute_script(fl::detail::format("release savepoint {}",
+  //   fl::detail::quote_identifier(std::to_string(savepoint))));
+}
+
+void vt_stmt::xRollbackTo(int savepoint) {
+  // std::cerr << "rollback" << std::endl;
+  // cache_->db.execute_script(fl::detail::format("rollback to savepoint {}",
+  //   fl::detail::quote_identifier(std::to_string(savepoint))));
 }
 
 bool
@@ -459,6 +513,8 @@ vt_stmt::xFilter(const fl::vtab::index_info& info, cursor* cursor)
     std::views::transform([&info](auto&& e) {
       return info.columns[e.index + 1].constraints[0].current_value.value();
     });
+
+  // db().execute_script(cache->fake_insert_sql);
 
   cache->insert_meta_stmt
     .reset() //

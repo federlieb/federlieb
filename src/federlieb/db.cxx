@@ -103,6 +103,15 @@ fl::db::is_interrupted()
                  db_.get());
 }
 
+int
+fl::db::txn_state(const std::string schema)
+{
+  return fl::api(sqlite3_txn_state,
+                 db_.get(),
+                 db_.get(),
+                 schema.c_str());
+}
+
 fl::value::blob
 fl::db::serialize(const std::string& name) {
 

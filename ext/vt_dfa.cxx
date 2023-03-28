@@ -225,7 +225,9 @@ vt_dfa::cursor::cursor(vt_dfa* vtab) : tmpdb_(":memory:") {
     state_limit int default -1,
     fill int not null default false,
     start_state int not null,
-    dead_state int not null
+    dead_state int not null,
+    no_incoming any [blob],
+    no_outgoing any [blob]
   );
 
   create table if not exists nfastate(
@@ -373,8 +375,7 @@ vt_dfa::xConnect(bool create)
         state_limit       INT HIDDEN,
         fill              INT HIDDEN,
         incomplete        INT,
-        dfa_states        JSON [BLOB],
-        dfa_transitions   JSON [BLOB],
+        start_state       INT,
         dfa_id            INT,
         state_count       INT
       )
@@ -685,13 +686,13 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
     cursor->tmpdb_.prepare(R"SQL(
 
       insert into dfa(
-        complete, state_limit, fill, start_state, dead_state
+        complete, state_limit, fill, start_state, dead_state, no_incoming, no_outgoing
       ) values(
-        :complete, :state_limit, :fill, :start_state, :dead_state
+        :complete, :state_limit, :fill, :start_state, :dead_state, :no_incoming, :no_outgoing
       )
 
     )SQL").execute(
-      !incomplete, state_limit_int, fill_int, start_id, dead_id
+      !incomplete, state_limit_int, fill_int, start_id, dead_id, no_incoming, no_outgoing
     );
 
     cursor->tmpdb_.execute_script("analyze");
@@ -719,12 +720,11 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
       ?5 as state_limit,
       ?6 as fill,
       ?7 as incomplete,
-      null as dfa_states,
-      null as dfa_transitions,
+      ?8 as start_state,
       ?1,
       (select count(*) from dfastate) as state_count
 
-  )SQL").execute(dfa_id, no_incoming, no_outgoing, nfa_transitions, state_limit_int, fill_int, incomplete);
+  )SQL").execute(dfa_id, no_incoming, no_outgoing, nfa_transitions, state_limit_int, fill_int, incomplete, start_id);
 
 }
 
