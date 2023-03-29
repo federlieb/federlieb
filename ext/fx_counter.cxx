@@ -14,6 +14,8 @@ fx_counter::xFunc(const std::string key, int64_t diff)
 
   if (0 == value) {
     map_.erase(key);
+  } else {
+    map_[key] = value;
   }
 
   return value;

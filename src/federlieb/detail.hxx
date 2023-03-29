@@ -68,6 +68,12 @@ to_vector(R&& range)
 }
 
 std::string
+mangle_for_multiline_comment(const std::string& s);
+
+std::string
+quote_string(const std::string& s);
+
+std::string
 quote_identifier(const std::string& s);
 
 std::vector<std::string>

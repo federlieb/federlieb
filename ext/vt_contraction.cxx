@@ -6,60 +6,53 @@
 
 namespace fl = ::federlieb;
 
-// TODO: Possibly use the pointer passing interface to make edge_if work on a
-// whole set of edges instead of executing the query repeatedly? Similarily,
-// There is probably no reason to have a vertex_if parameter, which vertices
-// are to be removed could be stated directly, but that should not make a big
-// difference performance-wise.
-
-// There might even be use cases where removal of a vertex depends on which
-// edges are currently available, and likewise edge removal might depend on
-// the current state of the graph.
+// TODO: There isn't really a point in having separate edge and history
+// tables.
 
 void
 vt_contraction::cursor::import_edges(vt_contraction* vtab)
 {
   tmpdb_.execute_script(R"SQL(
 
-    CREATE TABLE edge(
-      src ANY [BLOB] NOT NULL,
-      dst ANY [BLOB] NOT NULL,
-      UNIQUE(src, dst),
-      UNIQUE(dst, src)
+    create table edge(
+      src any [blob] not null,
+      dst any [blob] not null,
+      unique(src, dst),
+      unique(dst, src)
     );
 
-    CREATE TABLE history(
-      src ANY [BLOB] NOT NULL,
-      mid_src ANY [BLOB],
-      mid_dst ANY [BLOB],
-      dst ANY [BLOB] NOT NULL,
-      contracted INT NOT NULL DEFAULT FALSE
+    create table history(
+      src any [blob] not null,
+      mid_src any [blob],
+      mid_dst any [blob],
+      dst any [blob] not null,
+      contracted int not null default false
     );
 
-    CREATE INDEX idx_history_src_dst ON history(src,dst);
+    create index idx_history_src_dst on history(src,dst);
 
-    CREATE TRIGGER trigger_delete_edge
-    AFTER DELETE ON edge
-    BEGIN
-      UPDATE
+    create trigger trigger_delete_edge
+    after delete on edge
+    begin
+      update
         history
-      SET
-        contracted = TRUE
-      WHERE 
-        src = OLD.src
-        AND
-        dst = OLD.dst
+      set
+        contracted = true
+      where 
+        src = old.src
+        and
+        dst = old.dst
       ;
-    END;
+    end;
     ;
 
   )SQL");
 
   auto insert_edge_stmt =
-    tmpdb_.prepare("INSERT INTO edge(src, dst) VALUES(:src, :dst)");
+    tmpdb_.prepare("insert into edge(src, dst) values(:src, :dst)");
 
   auto edges_stmt = vtab->db().prepare(
-    fl::detail::format("SELECT * FROM {}", vtab->kwarg_or_throw("edges")));
+    fl::detail::format("select * from {}", vtab->kwarg_or_throw("edges")));
 
   edges_stmt.execute();
 
@@ -67,14 +60,14 @@ vt_contraction::cursor::import_edges(vt_contraction* vtab)
 
   tmpdb_.execute_script(R"SQL(
 
-    INSERT INTO history(src, dst) SELECT src, dst FROM edge
+    insert into history(src, dst) select src, dst from edge
 
   )SQL");
 
   tmpdb_.execute_script(R"SQL(
 
-    CREATE TABLE vertex AS
-    SELECT src AS vertex FROM edge UNION SELECT dst FROM edge
+    create table vertex as
+    select src as vertex from edge union select dst from edge
 
   )SQL");
 
@@ -83,105 +76,134 @@ vt_contraction::cursor::import_edges(vt_contraction* vtab)
 void
 vt_contraction::cursor::contract_vertices(vt_contraction* vtab)
 {
-
-  auto vertex_if_sql = vtab->kwarg("vertex_if");
-
-  if (!vertex_if_sql) {
+  if (!vtab->kwarg("contract_vertices").has_value()) {
     return;
   }
 
-  auto vertices_stmt =
-    tmpdb_.prepare("SELECT vertex FROM vertex");
+  auto contract_vertices_stmt = vtab->db().prepare(fl::detail::format(R"SQL(
 
-  vertices_stmt.execute();
+      with
+      {} as materialized (
+        select * from {}.{} where contracted is false and cursor_ptr is :ptr
+      ),
+      {}(vertex) as materialized (
+        select src from {}
+        union
+        select dst from {}
+      )
+      select * from {}
 
-  auto vertex_if_stmt = vtab->db().prepare(
-    fl::detail::format("SELECT * FROM {}", *vertex_if_sql));
+    )SQL",
+    fl::detail::quote_identifier(vtab->table_name_),
+    fl::detail::quote_identifier(vtab->schema_name_),
+    fl::detail::quote_identifier(vtab->table_name_),
+    fl::detail::quote_identifier(vtab->table_name_ + "_vertex"),
+    fl::detail::quote_identifier(vtab->table_name_),
+    fl::detail::quote_identifier(vtab->table_name_),
+    vtab->kwarg("contract_vertices").value()
+
+  ));
 
   auto vertex_history_stmt = tmpdb_.prepare(R"SQL(
 
-    INSERT INTO history(src, mid_src, mid_dst, dst)
-    SELECT
-      p.src, :vertex, NULL, s.dst
-    FROM
+    insert into history(src, mid_src, mid_dst, dst)
+    select
+      p.src, :vertex, null, s.dst
+    from
       edge p
-        INNER JOIN edge s
-          ON (p.dst = :vertex AND s.src = :vertex)
+        inner join edge s
+          on (p.dst = :vertex and s.src = :vertex)
 
   )SQL");
 
   auto vertex_edge_stmt = tmpdb_.prepare(R"SQL(
 
-    INSERT OR IGNORE INTO edge(src, dst)
-    SELECT
+    insert or ignore into edge(src, dst)
+    select
       p.src, s.dst
-    FROM
+    from
       edge p
-        INNER JOIN edge s
-          ON (p.dst = :vertex AND s.src = :vertex)
+        inner join edge s
+          on (p.dst = :vertex and s.src = :vertex)
 
   )SQL");
 
   auto vertex_delete_stmt = tmpdb_.prepare(R"SQL(
 
     -- https://sqlite.org/forum/forumpost/2ed79a01ae
-    DELETE FROM edge WHERE :vertex = src OR :vertex = dst
+    delete from edge where :vertex = src or :vertex = dst
 
   )SQL");
 
-  for (auto&& row : vertices_stmt) {
-    auto&& vertex = row.at(0);
+  struct vertex {
+    fl::value::variant vertex;
+  };
 
-    vertex_if_stmt
-      .reset()
-      .bind(":vertex", vertex)
-      .execute();
+  // TODO: ought to be repeated until nothing changes anymore
 
-    if (vertex_if_stmt.empty()) {
-      continue;
-    }
-
-    int can_remove = vertex_if_stmt.current_row().at(0);
-
-    if (can_remove) {
-      vertex_history_stmt.execute(vertex);
-      vertex_edge_stmt.execute(vertex);
-      vertex_delete_stmt.execute(vertex);
-    }
+  contract_vertices_stmt.execute();
+  for (auto&& row : contract_vertices_stmt | fl::as<vertex>()) {
+      vertex_history_stmt.reset().execute(row.vertex);
+      vertex_edge_stmt.reset().execute(row.vertex);
+      vertex_delete_stmt.reset().execute(row.vertex);
   }
+
 }
 
 void
 vt_contraction::cursor::contract_edges(vt_contraction* vtab)
 {
-  auto edge_if_sql = vtab->kwarg("edge_if");
 
-  if (!edge_if_sql) {
+  if (!vtab->kwarg("contract_edges").has_value()) {
     return;
   }
 
-  auto edge_if_stmt = vtab->db().prepare(
-    fl::detail::format("SELECT * FROM {}", *edge_if_sql));
+  auto contract_edges_stmt = vtab->db().prepare(fl::detail::format(R"SQL(
+
+      with
+      {} as materialized (
+        select * from {}.{} where contracted is false and cursor_ptr is :ptr
+      ),
+      {}(vertex) as materialized (
+        select src from {}
+        union
+        select dst from {}
+      )
+      select * from {}
+
+    )SQL",
+    fl::detail::quote_identifier(vtab->table_name_),
+    fl::detail::quote_identifier(vtab->schema_name_),
+    fl::detail::quote_identifier(vtab->table_name_),
+    fl::detail::quote_identifier(vtab->table_name_ + "_vertex"),
+    fl::detail::quote_identifier(vtab->table_name_),
+    fl::detail::quote_identifier(vtab->table_name_),
+    vtab->kwarg("contract_edges").value()
+
+  ));
+
+  contract_edges_stmt.bind_pointer(
+    ":ptr", "contraction:ptr", static_cast<void*>(this));
 
   auto edge_delete_stmt =
-    tmpdb_.prepare("DELETE FROM edge WHERE src = :src AND dst = :dst");
+    tmpdb_.prepare("delete from edge where src = :src and dst = :dst");
 
   auto edge_history_stmt =
-    tmpdb_.prepare("INSERT INTO history(src, mid_src, mid_dst, dst) "
-                   "VALUES(:src, :mid_src, :mid_dst, :dst)");
+    tmpdb_.prepare("insert into history(src, mid_src, mid_dst, dst) "
+                   "values(:src, :mid_src, :mid_dst, :dst)");
 
-  auto edge_edge_stmt = tmpdb_.prepare("INSERT OR IGNORE INTO edge(src, dst) "
-                                       "VALUES(:src, :dst)");
+  auto edge_edge_stmt = tmpdb_.prepare("insert or ignore into edge(src, dst) "
+                                       "values(:src, :dst)");
 
   auto edge_edges_stmt = tmpdb_.prepare(R"SQL(
 
-    SELECT
+    select
       p.src, :src, :dst, s.dst
-    FROM 
+    from 
       edge p
-      INNER JOIN
+      inner join
       edge s
-      ON p.dst = :src AND s.src = :dst
+      on p.dst = :src and s.src = :dst
 
   )SQL");
 
@@ -200,56 +222,59 @@ vt_contraction::cursor::contract_edges(vt_contraction* vtab)
     fl::value::variant dst;
   };
 
-  std::stack<edge> todo;
-
-  auto init = tmpdb_.prepare("SELECT src, dst FROM edge");
-
-  for (auto&& e : init.execute()) {
-    todo.push(edge{ e.at(0), e.at(1) });
-  }
-
   std::set<edge> seen;
 
-  while (!todo.empty()) {
-    auto current = todo.top();
-    todo.pop();
-    seen.insert(current);
+  while (true) {
 
-    edge_if_stmt
-      .reset()
-      .bind(":src", current.src)
-      .bind(":dst", current.dst)
-      .execute();
-    
-    auto contract =
-      (!edge_if_stmt.empty() && int(edge_if_stmt.current_row().at(0)));
+    std::stack<edge> todo;
 
-    if (!contract) {
-      continue;
-    }
+    contract_edges_stmt.reset().execute();
 
-    edge_edges_stmt.execute(current.src, current.dst);
-
-    for (auto&& q : edge_edges_stmt | fl::as<quad>()) {
-      edge_history_stmt.execute(q.src, q.mid_src, q.mid_dst, q.dst);
-      auto e = edge{ q.src, q.dst };
+    for (auto&& e : contract_edges_stmt | fl::as<edge>()) {
       if (!seen.contains(e)) {
         todo.push(e);
-        edge_edge_stmt.execute(e.src, e.dst);
       }
     }
 
-    // NOTE: previously deletion happened earlier.
-    edge_delete_stmt.execute(current.src, current.dst);
+    if (todo.empty()) {
+      break;
+    }
+
+    while (!todo.empty()) {
+
+      if (vtab->db().is_interrupted()) {
+        throw fl::error::interrupted();
+      }
+
+      auto current = todo.top();
+      todo.pop();
+      seen.insert(current);
+
+      // std::cerr << "edge_edges_stmt..." << std::endl;
+      edge_edges_stmt.execute(current.src, current.dst);
+
+      for (auto&& q : edge_edges_stmt | fl::as<quad>()) {
+        // std::cerr << "edge_history_stmt..." << std::endl;
+        edge_history_stmt.execute(q.src, q.mid_src, q.mid_dst, q.dst);
+        auto e = edge{ q.src, q.dst };
+        if (!seen.contains(e)) {
+          // todo.push(e);
+          // std::cerr << "!! edge_edge_stmt..." << e.src << " " << e.dst << std::endl;
+          edge_edge_stmt.execute(e.src, e.dst);
+        }
+      }
+
+      // NOTE: previously deletion happened earlier.
+      edge_delete_stmt.execute(current.src, current.dst);
+    }
+
   }
+
 }
 
 vt_contraction::cursor::cursor(vt_contraction* vtab)
   : tmpdb_(":memory:")
 {
-  import_edges(vtab);
-  contract_vertices(vtab);
-  contract_edges(vtab);
 }
 
 void
@@ -262,15 +287,74 @@ vt_contraction::xConnect(bool create)
       mid_src ANY [BLOB],
       mid_dst ANY [BLOB],
       dst ANY [BLOB] NOT NULL,
-      contracted INT NOT NULL
+      contracted INT NOT NULL,
+      cursor_ptr ANY [BLOB] HIDDEN
     )
   )SQL");
 }
 
+bool
+vt_contraction::xBestIndex(fl::vtab::index_info& info)
+{
+  info.mark_wanted("cursor_ptr", SQLITE_INDEX_CONSTRAINT_IS);
+
+  auto cursor_ptr_is = info.get("cursor_ptr", SQLITE_INDEX_CONSTRAINT_IS);
+
+  if (cursor_ptr_is != nullptr) {
+    // internal subquery
+  }
+
+  return true;
+}
+
+
+fl::stmt
+vt_contraction::subquery(const fl::vtab::index_info& info,
+                          vt_contraction::cursor* cursor)
+{
+  auto sub_stmt = cursor->tmpdb_.prepare("select *, null from history where contracted is false");
+  return sub_stmt.execute();
+}
+
+
 fl::stmt
 vt_contraction::xFilter(const fl::vtab::index_info& info, cursor* cursor)
 {
-  auto result = cursor->tmpdb_.prepare("SELECT * FROM history");
+
+  auto cursor_ptr_is = info.get("cursor_ptr", SQLITE_INDEX_CONSTRAINT_IS);
+
+  if (nullptr != cursor_ptr_is) {
+
+    auto ptr = fl::api(sqlite3_value_pointer,
+                       db_.get(),
+                       cursor_ptr_is->current_raw,
+                       "contraction:ptr");
+
+    fl::error::raise_if(nullptr == ptr, "invalid pointer");
+
+    return subquery(info, static_cast<vt_contraction::cursor*>(ptr));
+  }
+
+  cursor->import_edges(this);
+  cursor->contract_vertices(this);
+  cursor->contract_edges(this);
+
+  auto result = cursor->tmpdb_.prepare("SELECT *, null FROM history");
   result.execute();
   return result;
 }
+
+/*
+
+create virtual table t using fl_iterated_contraction(
+  edges=(...),
+  vertices=(...),
+  vertex_if=(
+    select vertex, true from t_vertex 
+  ),
+  edge_if=(
+    select src, dst, true from t_edge
+  )
+)
+
+*/

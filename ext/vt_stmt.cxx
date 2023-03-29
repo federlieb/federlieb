@@ -23,14 +23,28 @@ namespace fl = ::federlieb;
 // actually help? There is nothing in that that would inherently stop SQLite
 // from running a JOIN in the wrong order.
 
-static std::atomic<int> finding_out_column_names = 0;
+// TODO: make this threadsafe?
 
-struct guard {
-  guard() {
+// TODO: do the reference counting not in the db but outside
+
+static std::atomic<int> finding_out_column_names = 0;
+static std::atomic<int> doing_fake_insert = 0;
+
+struct finding_out_column_name_guard {
+  finding_out_column_name_guard() {
     finding_out_column_names++;
   }
-  ~guard() {
+  ~finding_out_column_name_guard() {
     finding_out_column_names--;
+  }
+};
+
+struct doing_fake_insert_guard {
+  doing_fake_insert_guard() {
+    doing_fake_insert++;
+  }
+  ~doing_fake_insert_guard() {
+    doing_fake_insert--;
   }
 };
 
@@ -148,6 +162,13 @@ vt_stmt::cursor::cursor(vt_stmt* vtab)
   auto key_sql = vtab->kwarg("key").value_or("(SELECT RANDOMBLOB(16))");
 
   key_ = vtab->db().select_scalar(key_sql);
+
+  if (!doing_fake_insert) {
+    // TODO: maybe do this only when actually writing new data?
+    doing_fake_insert_guard g;
+    vtab->db().execute_script(vtab->cache_->fake_insert_sql);
+  }
+
 }
 
 auto
@@ -258,7 +279,7 @@ vt_stmt::init_cache(fl::stmt& stmt)
         (meta.id = :id)
 
     )SQL",
-    table_name_, // FIXME: needs escaping for use in comment
+    fl::detail::mangle_for_multiline_comment(table_name_),
     fl::detail::str(px | fl::detail::prefix("meta.") |
                     fl::detail::suffix(", ")),
     fl::detail::str(cx | fl::detail::prefix("data.") |
@@ -271,7 +292,7 @@ vt_stmt::init_cache(fl::stmt& stmt)
       SET "refcount" = "refcount" + :diff
       WHERE "id" = :id
 
-    )SQL", table_name_ /* fixme: escape for comment */));
+    )SQL", fl::detail::mangle_for_multiline_comment(table_name_)));
 
   auto fake_insert_sql = fl::detail::format(R"SQL(
 
@@ -304,7 +325,7 @@ vt_stmt::xConnect(bool const create)
   // the statement. But in order to read out the column names from the statement,
   // it has to be prepared, which does trigger xBestIndex. So while we just want
   // the column names, disable materialization in xBestIndex in this scope.
-  guard g;
+  finding_out_column_name_guard g;
 
   auto stmt = db().prepare("SELECT * FROM " + args.front());
 
@@ -361,7 +382,7 @@ void vt_stmt::xBegin() {
   // NOTE: This should probably only use nested transactions
 
   // std::cerr << "begin transaction" << " " << table_name_ << std::endl;
-  // cache_->db.execute_script("begin transaction");
+  cache_->db.execute_script("savepoint 'transaction'");
 }
 
 void vt_stmt::xSync() {
@@ -370,30 +391,38 @@ void vt_stmt::xSync() {
 
 void vt_stmt::xCommit() {
   // std::cerr << "commit transaction" << " " << table_name_ << std::endl;
-  // cache_->db.execute_script("commit transaction");
+
+  // NOTE: as of SQLite 3.41.0 xCommit will be called without prior call to
+  // xBegin when the virtual table is created within a transaction. Since we
+  // never started a transaction in the temporary database, we cannot commit
+  // it either.
+  if (cache_->db.txn_state("main") != SQLITE_TXN_NONE) {
+    cache_->db.execute_script("commit transaction");
+  }
 }
 
 void vt_stmt::xRollback() {
   // std::cerr << "rollback transaction" << std::endl;
-  // cache_->db.execute_script("rollback transaction");
+  cache_->db.execute_script("rollback to savepoint 'transaction'");
+  cache_->db.execute_script("release savepoint 'transaction'");
 }
 
 void vt_stmt::xSavepoint(int savepoint) {
-  // std::cerr << "savepoint" << std::endl;
-  // cache_->db.execute_script(fl::detail::format("savepoint {}",
-  //   fl::detail::quote_identifier(std::to_string(savepoint))));
+  // std::cerr << "savepoint" << " " << savepoint << std::endl;
+  cache_->db.execute_script(fl::detail::format("savepoint {}",
+    fl::detail::quote_string(std::to_string(savepoint))));
 }
 
 void vt_stmt::xRelease(int savepoint) {
-  // std::cerr << "release" << std::endl;
-  // cache_->db.execute_script(fl::detail::format("release savepoint {}",
-  //   fl::detail::quote_identifier(std::to_string(savepoint))));
+  // std::cerr << "release" << " " << savepoint << std::endl;
+  cache_->db.execute_script(fl::detail::format("release savepoint {}",
+    fl::detail::quote_string(std::to_string(savepoint))));
 }
 
 void vt_stmt::xRollbackTo(int savepoint) {
-  // std::cerr << "rollback" << std::endl;
-  // cache_->db.execute_script(fl::detail::format("rollback to savepoint {}",
-  //   fl::detail::quote_identifier(std::to_string(savepoint))));
+  // std::cerr << "rollback to" << " " << savepoint << std::endl;
+  cache_->db.execute_script(fl::detail::format("rollback to savepoint {}",
+    fl::detail::quote_string(std::to_string(savepoint))));
 }
 
 bool
@@ -513,8 +542,6 @@ vt_stmt::xFilter(const fl::vtab::index_info& info, cursor* cursor)
     std::views::transform([&info](auto&& e) {
       return info.columns[e.index + 1].constraints[0].current_value.value();
     });
-
-  // db().execute_script(cache->fake_insert_sql);
 
   cache->insert_meta_stmt
     .reset() //

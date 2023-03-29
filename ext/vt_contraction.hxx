@@ -22,6 +22,11 @@ public:
     cursor(vt_contraction* vtab);
   };
 
+  fl::stmt
+  subquery(const fl::vtab::index_info& info, vt_contraction::cursor* cursor);
+
   void xConnect(bool create);
+  bool xBestIndex(fl::vtab::index_info& info);
+
   fl::stmt xFilter(const fl::vtab::index_info& info, cursor* cursor);
 };

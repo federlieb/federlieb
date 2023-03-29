@@ -1,5 +1,7 @@
 #pragma once
 
+#include <mutex>
+
 #include "federlieb/db.hxx"
 #include "federlieb/vtab.hxx"
 
@@ -43,6 +45,11 @@ public:
   };
 
   std::optional<cache> cache_;
+
+  struct {
+    std::mutex mutex;
+    std::vector<int64_t> vector;
+  } meta_id_refcount;
 
   struct cursor
   {

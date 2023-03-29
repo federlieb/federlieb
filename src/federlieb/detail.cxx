@@ -5,6 +5,23 @@
 namespace fl = ::federlieb;
 
 std::string
+fl::detail::mangle_for_multiline_comment(const std::string& s)
+{
+  // FIXME: implement this properly
+  std::stringstream ss;
+  ss << s;
+  return ss.str();
+}
+
+std::string
+fl::detail::quote_string(const std::string& s)
+{
+  std::stringstream ss;
+  ss << std::quoted(s, '\'', '\'');
+  return ss.str();
+}
+
+std::string
 fl::detail::quote_identifier(const std::string& s)
 {
   std::stringstream ss;

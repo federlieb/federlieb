@@ -643,7 +643,7 @@ public:
          void** ppArg) noexcept { return SQLITE_OK; };
 #endif
 
-#if 0
+#if 1
     module.xUpdate = [](sqlite3_vtab* pVtab,
                         int argc,
                         sqlite3_value** argv,
