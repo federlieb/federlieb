@@ -16,5 +16,13 @@
 			]
 		}
 	},
-	"postCreateCommand": "./.vscode/setup.sh"
+	"postCreateCommand": "./.vscode/setup.sh",
+	"runArgs": [
+		"--userns=keep-id"
+	],
+	"containerUser": "vscode",
+	"updateRemoteUserUID": true,
+	"containerEnv": {
+		"HOME": "/home/vscode"
+	}
 }

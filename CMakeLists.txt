@@ -10,7 +10,7 @@ project(federlieb
 
 find_package(fmt REQUIRED)
 find_package(SQLite3 REQUIRED)
-find_package(Boost REQUIRED COMPONENTS graph json)
+find_package(Boost REQUIRED)
 
 include(CheckIPOSupported)
 check_ipo_supported()

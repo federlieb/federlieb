@@ -12,8 +12,13 @@ jobs:
           push: never
           runCmd: |
             .vscode/setup.sh
-            cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake -S/workspaces/federlieb -B/workspaces/federlieb/build -G Ninja
+            cmake \
+              -DCMAKE_MODULE_PATH=/workspaces/federlieb/build \
+              -DCMAKE_BUILD_TYPE=Debug \
+              -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake \
+              -S/workspaces/federlieb \
+              -B/workspaces/federlieb/build \
+              -G Ninja
             cmake --build build --config Debug --target fl_extensions --
             . .venv/bin/activate
             pytest tests
-  
