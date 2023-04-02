@@ -64,13 +64,6 @@ vt_contraction::cursor::import_edges(vt_contraction* vtab)
 
   )SQL");
 
-  tmpdb_.execute_script(R"SQL(
-
-    create table vertex as
-    select src as vertex from edge union select dst from edge
-
-  )SQL");
-
 }
 
 void
@@ -108,7 +101,13 @@ vt_contraction::cursor::contract_vertices(vt_contraction* vtab)
 
     insert into history(src, mid_src, mid_dst, dst)
     select
-      p.src, :vertex, null, s.dst
+      p.src,
+      :vertex,
+      case
+      when exists (select 1 from edge where src = dst and src = :vertex) then :vertex
+      else null
+      end,
+      s.dst
     from
       edge p
         inner join edge s

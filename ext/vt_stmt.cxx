@@ -27,6 +27,11 @@ namespace fl = ::federlieb;
 
 // TODO: do the reference counting not in the db but outside
 
+// TODO: Would be easier actually if we just keep the meta table and use
+// sqlite3_serialize to put the whole database there, which would avoid any
+// reader/writer conflicts, since we would then leave any transaction inside
+// xFilter.
+
 static std::atomic<int> finding_out_column_names = 0;
 static std::atomic<int> doing_fake_insert = 0;
 
@@ -165,8 +170,8 @@ vt_stmt::cursor::cursor(vt_stmt* vtab)
 
   if (!doing_fake_insert) {
     // TODO: maybe do this only when actually writing new data?
-    doing_fake_insert_guard g;
-    vtab->db().execute_script(vtab->cache_->fake_insert_sql);
+    // doing_fake_insert_guard g;
+    // vtab->db().execute_script(vtab->cache_->fake_insert_sql);
   }
 
 }
@@ -180,6 +185,7 @@ vt_stmt::init_cache(fl::stmt& stmt)
   fl::error::raise_if(stmt.column_count() < 1, "zero columns");
 
   db.execute_script(R"SQL(
+    
     drop table if exists meta;
     drop table if exists data;
 
@@ -187,6 +193,7 @@ vt_stmt::init_cache(fl::stmt& stmt)
     pragma foreign_keys = 0;
     pragma synchronous = off;
     pragma journal_mode = memory;
+
   )SQL");
 
   auto px =
@@ -221,7 +228,7 @@ vt_stmt::init_cache(fl::stmt& stmt)
       )
 
     )SQL",
-    table_name_, // fixme: escape for comment
+    fl::detail::mangle_for_multiline_comment(table_name_),
     fl::detail::str(px | fl::detail::prefix(", ") |
                     fl::detail::suffix(" ANY [BLOB]")),
     fl::detail::str(px | fl::detail::prefix(", "))));
@@ -235,7 +242,7 @@ vt_stmt::init_cache(fl::stmt& stmt)
       )
 
     )SQL",
-    table_name_, // fixme: escape for comment
+    fl::detail::mangle_for_multiline_comment(table_name_),
     fl::detail::str(cx | fl::detail::prefix(", ") |
                     fl::detail::suffix(" ANY [BLOB]"))));
 
@@ -253,7 +260,7 @@ vt_stmt::init_cache(fl::stmt& stmt)
       RETURNING "id", "refcount"
 
     )SQL",
-    table_name_, // fixme: escape for comment
+    fl::detail::mangle_for_multiline_comment(table_name_),
     fl::detail::str(px | fl::detail::suffix(", ")),
     fl::detail::str(pqx | fl::detail::suffix(", "))));
 
