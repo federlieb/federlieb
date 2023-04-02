@@ -1,20 +1,14 @@
 [
-    {
-      "name": "Clang 14.0.0 x86_64-pc-linux-gnu",
-      "environmentSetupScript": "${workspaceFolder}/.vscode/setup.sh",
-      "toolchainFile": "${workspaceFolder}/build/conan_toolchain.cmake",
-      "compilers": {
-        "C": "/usr/bin/clang",
-        "CXX": "/usr/bin/clang++"
-      }
+  {
+    "name": "GCC 11.3.0 x86_64-linux-gnu",
+    "environmentSetupScript": "${workspaceFolder}/.vscode/setup.sh",
+    "toolchainFile": "${workspaceFolder}/build/conan_toolchain.cmake",
+    "compilers": {
+      "C": "/usr/bin/gcc",
+      "CXX": "/usr/bin/g++"
     },
-    {
-      "name": "GCC 11.3.0 x86_64-linux-gnu",
-      "environmentSetupScript": "${workspaceFolder}/.vscode/setup.sh",
-      "toolchainFile": "${workspaceFolder}/build/conan_toolchain.cmake",
-      "compilers": {
-        "C": "/usr/bin/gcc",
-        "CXX": "/usr/bin/g++"
-      }
+    "cmakeSettings": {
+      "CMAKE_MODULE_PATH": "/workspaces/federlieb/build/"
     }
-  ]
+  }
+]

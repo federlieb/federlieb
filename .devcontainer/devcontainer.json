@@ -17,6 +17,9 @@
 		}
 	},
 	"postCreateCommand": "./.vscode/setup.sh",
+	"remoteEnv": {
+		"PODMAN_USERNS": "keep-id:uid=1000,gid=1000"
+	},
 	"runArgs": [
 		"--userns=keep-id"
 	],
