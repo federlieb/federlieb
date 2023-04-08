@@ -9,6 +9,8 @@ namespace fl = ::federlieb;
 // TODO: There isn't really a point in having separate edge and history
 // tables.
 
+// TODO: Mode where history is not maintained if not needed afterwards.
+
 void
 vt_contraction::cursor::import_edges(vt_contraction* vtab)
 {

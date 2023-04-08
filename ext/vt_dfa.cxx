@@ -372,6 +372,7 @@ vt_dfa::xConnect(bool create)
         no_incoming       JSON [BLOB] HIDDEN VT_REQUIRED,
         no_outgoing       JSON [BLOB] HIDDEN VT_REQUIRED,
         nfa_transitions   JSON [BLOB] HIDDEN VT_REQUIRED,
+        alphabet          JSON [BLOB] HIDDEN,
         state_limit       INT HIDDEN,
         fill              INT HIDDEN,
         incomplete        INT,
@@ -429,6 +430,7 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
 
   auto state_limit = info.get("state_limit", SQLITE_INDEX_CONSTRAINT_EQ);
   auto fill = info.get("fill", SQLITE_INDEX_CONSTRAINT_EQ);
+  auto alphabet = info.get("alphabet", SQLITE_INDEX_CONSTRAINT_EQ);
 
   sqlite3_int64 state_limit_int =
     nullptr != state_limit ? std::get<fl::value::integer>(state_limit->current_value.value()).value : -1;
@@ -449,7 +451,15 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
 
   )SQL");
 
-  sqlite3_int64 dead_id = 0;
+  if (alphabet) {
+    cursor->tmpdb_.prepare(R"SQL(
+      
+      insert or ignore into via(via) select value from json_each(?1)
+
+    )SQL").execute(alphabet->current_value.value());
+  }
+
+  sqlite3_int64 dead_id = 2;
   sqlite3_int64 start_id = 1;
 
   cursor->tmpdb_.prepare(R"SQL(
@@ -462,6 +472,7 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
     from
       json_each(?1) each
     union
+    -- TODO: This generates NULL nfastates for no good reason.
     select
       null, null, each.value
     from
@@ -513,9 +524,7 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
       union
       select base.src, nfatrans.via, nfatrans.dst
       from base
-        inner join nfatrans on base.dst = nfatrans.src 
-      where
-        base.via is null
+        inner join nfatrans on base.via is null and base.dst = nfatrans.src
     )
     select src, via, dst from base;
 
@@ -597,6 +606,8 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
         cross join json_each(s.state) each
     where
         s.round = ( (?1) - 1 )
+    order by
+        s.id
 
   )SQL");
 
@@ -659,7 +670,7 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
 
       with base as (
         select
-          s.id, via.id, 0
+          s.id, via.id, 2 -- dead_state
         from
           dfastate s join via left join dfatrans t on t.src = s.id and t.via = via.id
         where
@@ -717,6 +728,7 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
       ?2 as no_incoming,
       ?3 as no_outgoing,
       ?4 as nfa_transitions,
+      ?9 as alphabet,
       ?5 as state_limit,
       ?6 as fill,
       ?7 as incomplete,
@@ -724,7 +736,9 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
       ?1,
       (select count(*) from dfastate) as state_count
 
-  )SQL").execute(dfa_id, no_incoming, no_outgoing, nfa_transitions, state_limit_int, fill_int, incomplete, start_id);
+  )SQL").execute(dfa_id, no_incoming, no_outgoing, nfa_transitions,
+    state_limit_int, fill_int, incomplete, start_id,
+    alphabet ? alphabet->current_value.value() : fl::value::null{});
 
 }
 

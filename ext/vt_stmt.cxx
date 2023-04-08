@@ -90,9 +90,6 @@ std::pair<std::string, std::string>
 to_create_index(const std::string& table_name, const fl::vtab::index_info& info)
 {
   std::stringstream ss;
-
-  auto quoted_table_name = fl::detail::quote_identifier(table_name);
-
   std::list<std::string> columns;
 
   for (auto column : info.columns) {
@@ -116,7 +113,7 @@ to_create_index(const std::string& table_name, const fl::vtab::index_info& info)
   }
 
   auto cols = boost::algorithm::join(columns, ",");
-
+  auto quoted_table_name = fl::detail::quote_identifier(table_name);
   auto index_name = (
     "fl_stmt_auto_index_" + quoted_table_name + "(" + cols + ")"); 
 
@@ -124,9 +121,9 @@ to_create_index(const std::string& table_name, const fl::vtab::index_info& info)
     
     cols = "id," + cols;
 
-    ss << "CREATE INDEX IF NOT EXISTS "
+    ss << "create index if not exists "
       << fl::detail::quote_identifier(index_name)
-      << " ON "
+      << " on "
       << quoted_table_name
       << "(" << cols << ")";
   }
@@ -139,6 +136,7 @@ do_stuff_with_cache_and_info(vt_stmt::cache& cache, const fl::vtab::index_info& 
   auto constrained_select = cache.select_sql;
 
   auto constraints = to_where_fragment(info, cache.bind_parameter_count);
+
 
   if (!constraints.empty()) {
     constrained_select += " AND (" + constraints + ")";
@@ -164,7 +162,7 @@ vt_stmt::cache::change_meta_refcount(int64_t const id, int64_t const diff)
 
 vt_stmt::cursor::cursor(vt_stmt* vtab)
 {
-  auto key_sql = vtab->kwarg("key").value_or("(SELECT RANDOMBLOB(16))");
+  auto key_sql = vtab->kwarg("key").value_or("(select randomblob(16))");
 
   key_ = vtab->db().select_scalar(key_sql);
 
@@ -219,32 +217,33 @@ vt_stmt::init_cache(fl::stmt& stmt)
   auto create_meta_stmt = db.prepare(fl::detail::format(
     R"SQL(
 
-      CREATE TABLE meta( /* {} */
-          "id"       INTEGER PRIMARY KEY
-        , "refcount" INTEGER
-        , "key"      ANY [BLOB]
+      create table meta( /* {} */
+          "id"       integer primary key
+        , "refcount" integer
+        , "key"      any [blob]
         {}                 /* , p1 type, p2 type... */
-        , UNIQUE("key" {}) /* , p1, p2, p3...       */
+        , data blob
+        , unique("key" {}) /* , p1, p2, p3...       */
       )
 
     )SQL",
     fl::detail::mangle_for_multiline_comment(table_name_),
     fl::detail::str(px | fl::detail::prefix(", ") |
-                    fl::detail::suffix(" ANY [BLOB]")),
+                    fl::detail::suffix(" any [blob]")),
     fl::detail::str(px | fl::detail::prefix(", "))));
 
   auto create_data_stmt = db.prepare(fl::detail::format(
     R"SQL(
 
-      CREATE TABLE data( /* {} */
-        id INTEGER REFERENCES meta(id) ON DELETE CASCADE
+      create table data( /* {} */
+        id integer references meta(id) on delete cascade
         {} /* , c1 type, c2 type... */
       )
 
     )SQL",
     fl::detail::mangle_for_multiline_comment(table_name_),
     fl::detail::str(cx | fl::detail::prefix(", ") |
-                    fl::detail::suffix(" ANY [BLOB]"))));
+                    fl::detail::suffix(" any [blob]"))));
 
   // Need tables to prepare statements
   create_meta_stmt.execute();
@@ -253,11 +252,11 @@ vt_stmt::init_cache(fl::stmt& stmt)
   auto insert_meta_stmt = db.prepare(fl::detail::format(
     R"SQL(
 
-      INSERT INTO /* {} */ "meta"({} "key", "refcount") /* p1, p2, ... */
-      VALUES({} :key, -1)                      /* ?1, ?2, ... */
-      ON CONFLICT DO
-      UPDATE SET "refcount" = "refcount" + 1
-      RETURNING "id", "refcount"
+      insert into /* {} */ "meta"({} "key", "refcount") /* p1, p2, ... */
+      values({} :key, -1)                      /* ?1, ?2, ... */
+      on conflict do
+      update set "refcount" = "refcount" + 1
+      returning "id", "refcount"
 
     )SQL",
     fl::detail::mangle_for_multiline_comment(table_name_),
@@ -267,8 +266,8 @@ vt_stmt::init_cache(fl::stmt& stmt)
   auto insert_data_stmt = db.prepare(fl::detail::format(
     R"SQL(
 
-      INSERT INTO "data"({} id) /* c1, c2, ... */
-      VALUES({} :id)            /* ?1, ?2, ... */
+      insert into "data"({} id) /* c1, c2, ... */
+      values({} :id)            /* ?1, ?2, ... */
 
     )SQL",
     fl::detail::str(cx | fl::detail::suffix(", ")),
@@ -277,12 +276,12 @@ vt_stmt::init_cache(fl::stmt& stmt)
   auto select_sql = (fl::detail::format(
     R"SQL(
 
-      SELECT /* {} */
+      select /* {} */
         {}   /* meta.p1, meta.p2, ..., */
         {}   /* data.c1, data.c2, ..., */
-        NULL /* TODO: unfortunate due to formatting limitations */
-      FROM "meta", "data" USING(id)
-      WHERE
+        null /* todo: unfortunate due to formatting limitations */
+      from "meta", "data" using(id)
+      where
         (meta.id = :id)
 
     )SQL",
@@ -295,9 +294,9 @@ vt_stmt::init_cache(fl::stmt& stmt)
   auto update_refcount_stmt = db.prepare(fl::detail::format(
     R"SQL(
 
-      UPDATE "meta" /* {} */
-      SET "refcount" = "refcount" + :diff
-      WHERE "id" = :id
+      update "meta" /* {} */
+      set "refcount" = "refcount" + :diff
+      where "id" = :id
 
     )SQL", fl::detail::mangle_for_multiline_comment(table_name_)));
 
@@ -334,7 +333,7 @@ vt_stmt::xConnect(bool const create)
   // the column names, disable materialization in xBestIndex in this scope.
   finding_out_column_name_guard g;
 
-  auto stmt = db().prepare("SELECT * FROM " + args.front());
+  auto stmt = db().prepare("select * from " + args.front());
 
   std::vector<std::string> column_defs;
 
@@ -433,11 +432,47 @@ void vt_stmt::xRollbackTo(int savepoint) {
 }
 
 bool
+schema_has_index_named(fl::db db, std::string index_name) {
+  return !db.prepare(R"SQL(
+
+    select 1 from sqlite_schema where type is 'index' and name = 
+
+  )SQL" + fl::detail::quote_string(index_name)).execute().empty();
+}
+
+bool
+schema_has_table_named(fl::db db, std::string table_name) {
+  return !db.prepare(R"SQL(
+
+    select 1 from sqlite_schema where type is 'table' and name = 
+
+  )SQL" + fl::detail::quote_string(table_name)).execute().empty();
+}
+
+bool
 vt_stmt::xBestIndex(fl::vtab::index_info& info)
 {
 
+  bool rowid_eq_null = false;
+
+  // Check for a `WHERE rowid = NULL` constraint as a signal that the rowset
+  // is not actually needed. This allows `EXPLAIN` or `EXPLAIN QUERY PLAN`
+  // without the cost of materializing the statement first. Note though that
+  // without materializing the statement there cannot be any statistics and
+  // the query plan might be different from what one would get otherwise.
+
+  if (!info.columns[0].constraints.empty()) {
+    auto&& con = info.columns[0].constraints[0];
+    if (con.op == SQLITE_INDEX_CONSTRAINT_EQ
+      && con.rhs.has_value()
+      && std::holds_alternative<fl::value::null>(con.rhs.value())) {
+      // `rowid = NULL` is never true
+      rowid_eq_null = true;
+    }
+  }
+
   // Materialize now to gather statistics if there are no parameters
-  if (1 > cache_->bind_parameter_count && !finding_out_column_names) {
+  if (1 > cache_->bind_parameter_count && !finding_out_column_names && !rowid_eq_null) {
     auto copy = info;
 
     for (auto&& column : copy.columns) {
@@ -465,8 +500,6 @@ vt_stmt::xBestIndex(fl::vtab::index_info& info)
     }
   }
 
-  // TODO: if the statement does not have unbound parameters it would be possible
-  // to materialize the statement here and report good estimates. 
 
   auto idx = to_create_index("data", info);
   auto create_index_sql = idx.first;
@@ -475,21 +508,20 @@ vt_stmt::xBestIndex(fl::vtab::index_info& info)
   // TODO: even with no index, table row count can be gathered from sqlite_stat1
 
   if (!create_index_sql.empty()) {
-    cache_->db.prepare(create_index_sql).execute();
+
+    if (!schema_has_index_named(cache_->db, index_name)) {
+      cache_->db.prepare(create_index_sql).execute();
+    }
 
     // TODO: Does not really make sense here
     // TODO: do not analyze if index already existed
+    // TODO: instead, analyze after running the statement and adding new data
+    // TODO: ... but what if we are adding an index 
     cache_->db.prepare("analyze " + fl::detail::quote_identifier(index_name)).execute();
 
     // TODO: Move this logic to a better place.
 
-    auto has_stmt1 = cache_->db.prepare(R"SQL(
-
-      select 1 from pragma_table_list where name = 'sqlite_stat1'
-
-    )SQL").execute();
-
-    if (!has_stmt1.empty()) {
+    if (schema_has_table_named(cache_->db, "sqlite_stat1")) {
 
       auto stat1_stmt = cache_->db.prepare(R"SQL(
 

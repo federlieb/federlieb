@@ -36,6 +36,7 @@ extern "C"
 #include "ext/vt_miniucd.hxx"
 #include "ext/vt_colormap.hxx"
 #include "ext/vt_bfs.hxx"
+#include "ext/vt_stmt_source.hxx"
 
 extern "C"
 {
@@ -72,6 +73,7 @@ extern "C"
       vt_miniucd::register_module(ours);
       vt_colormap::register_module(ours);
       vt_breadth_first_search::register_module(ours);
+      vt_stmt_source::register_module(ours);
 
       fx_toset::register_function(ours);
       fx_toset_agg::register_function(ours);

@@ -107,17 +107,22 @@ fl::vtab::to_sql_with_bind_parameters(const fl::vtab::constraint_info& constrain
   auto op_str = constraint_op_to_string(constraint.op);
 
   if (nullptr != op_str) {
-    fl::error::raise_if(!constraint.argv_index, "impossible");
+
+    fl::error::raise_if(!constraint.argv_index && !constraint.rhs, "impossible");
+
+    auto rhs = constraint.argv_index
+      ? ("?" + std::to_string(constraint.argv_index.value() + offset))
+      : to_sql(constraint.rhs.value());
 
     if (constraint.op == SQLITE_INDEX_CONSTRAINT_ISNOTNULL) {
-      return "IS NOT ?" + std::to_string(constraint.argv_index.value() + offset);
+      return "IS NOT " + rhs;
     }
 
     if (constraint.op == SQLITE_INDEX_CONSTRAINT_ISNULL) {
-      return "IS ?" + std::to_string(constraint.argv_index.value() + offset);
+      return "IS " + rhs;
     }
 
-    return std::string(op_str) + " ?" + std::to_string(constraint.argv_index.value() + offset);
+    return std::string(op_str) + " " + rhs;
   }
 
   return "";

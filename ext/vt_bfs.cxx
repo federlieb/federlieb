@@ -8,6 +8,8 @@
 
 namespace fl = ::federlieb;
 
+// TODO: Option to stop on hitting certain vertices.
+
 vt_breadth_first_search::cursor::cursor(vt_breadth_first_search* vtab)
 {
   g_.import(vtab);
@@ -32,6 +34,8 @@ vt_breadth_first_search::xFilter(const fl::vtab::index_info& info, cursor* curso
 {
 
   auto& root = info.columns[1].constraints[0].current_value;
+
+  auto root_vertex = cursor->g_.vertex(*root);
 
   std::vector<size_t> time(boost::num_vertices(cursor->g_.graph_));
 
