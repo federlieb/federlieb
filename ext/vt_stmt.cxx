@@ -449,6 +449,53 @@ schema_has_table_named(fl::db db, std::string table_name) {
   )SQL" + fl::detail::quote_string(table_name)).execute().empty();
 }
 
+int
+estimate_rows_by_table_name(fl::db db, std::string table_name) {
+  return 100;
+}
+
+int
+estimate_rows_by_index_name(fl::db db, std::string index_name) {
+
+  if (schema_has_table_named(db, "sqlite_stat1")) {
+
+    auto stat1_stmt = db.prepare(R"SQL(
+
+      select tbl, idx, stat
+      from sqlite_stat1
+      where
+        idx is not null
+        and
+        tbl is not null
+        and
+        stat is not null
+        -- todo: where idx is :name
+
+    )SQL").execute();
+
+    struct sqlite_stat1 {
+      std::string tbl;
+      std::string idx;
+      std::string stat;
+    };
+
+    for (auto&& row : stat1_stmt | fl::as<sqlite_stat1>()) {
+      auto pos = row.stat.find_last_not_of("0123456789");
+      if (row.idx == index_name && std::string::npos != pos) {
+        auto row_count = row.stat.substr(pos + 1);
+        return std::stoi(row_count);
+      }
+    }
+  }
+
+  return 100;
+}
+
+int
+estimate_rows_by_constraints(fl::db db, const fl::vtab::index_info& info) {
+  return 1000;
+}
+
 bool
 vt_stmt::xBestIndex(fl::vtab::index_info& info)
 {
@@ -500,7 +547,6 @@ vt_stmt::xBestIndex(fl::vtab::index_info& info)
     }
   }
 
-
   auto idx = to_create_index("data", info);
   auto create_index_sql = idx.first;
   auto index_name = idx.second;
@@ -519,40 +565,9 @@ vt_stmt::xBestIndex(fl::vtab::index_info& info)
     // TODO: ... but what if we are adding an index 
     cache_->db.prepare("analyze " + fl::detail::quote_identifier(index_name)).execute();
 
-    // TODO: Move this logic to a better place.
-
-    if (schema_has_table_named(cache_->db, "sqlite_stat1")) {
-
-      auto stat1_stmt = cache_->db.prepare(R"SQL(
-
-        select tbl, idx, stat
-        from sqlite_stat1
-        where
-          idx is not null
-          and
-          tbl is not null
-          and
-          stat is not null
-          -- todo: where idx is :name
-
-      )SQL").execute();
-
-      struct sqlite_stat1 {
-        std::string tbl;
-        std::string idx;
-        std::string stat;
-      };
-
-      for (auto&& row : stat1_stmt | fl::as<sqlite_stat1>()) {
-        auto pos = row.stat.find_last_not_of("0123456789");
-        if (row.idx == index_name && std::string::npos != pos) {
-          auto row_count = row.stat.substr(pos + 1);
-          info.estimated_rows = std::stoi(row_count);
-          info.estimated_cost = 6 * info.estimated_rows;
-        }
-
-      }
-    }
+    auto est = estimate_rows_by_index_name(cache_->db, index_name);
+    info.estimated_rows = est;
+    info.estimated_cost = 6 * est;
 
   }
 
@@ -608,7 +623,11 @@ vt_stmt::xFilter(const fl::vtab::index_info& info, cursor* cursor)
 
   if (insert_meta_row.refcount < 0) {
 
-    auto user_stmt = db().prepare("SELECT * FROM " + arguments().front());
+    auto user_stmt = db().prepare(
+      fl::detail::format(
+        "select * from /* {} */ " + arguments().front(),
+        fl::detail::mangle_for_multiline_comment(table_name_)));
+
     user_stmt.execute(inputs);
 
     // log("D: SELECT user SQL:\n{}", user_stmt.expanded_sql());

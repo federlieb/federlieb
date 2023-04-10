@@ -464,6 +464,21 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
 
   cursor->tmpdb_.prepare(R"SQL(
 
+    insert or ignore into nfastate(state)
+    select
+      each.value
+    from
+      json_each(?1) each
+    union
+    select
+      each.value
+    from
+      json_each(?2) each
+
+  )SQL").execute(no_incoming, no_outgoing);
+
+  cursor->tmpdb_.prepare(R"SQL(
+
     insert into nfapipeline(src, via, dst)
     select
       each.value->>'$[0]' as src,
@@ -471,19 +486,8 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
       each.value->>'$[2]' as dst
     from
       json_each(?1) each
-    union
-    -- TODO: This generates NULL nfastates for no good reason.
-    select
-      null, null, each.value
-    from
-      json_each(?2) each
-    union
-    select
-      each.value, null, null
-    from
-      json_each(?3) each
 
-  )SQL").execute(nfa_transitions, no_incoming, no_outgoing);
+  )SQL").execute(nfa_transitions);
 
   cursor->tmpdb_.execute_script(R"SQL(
 

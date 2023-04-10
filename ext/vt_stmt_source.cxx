@@ -64,6 +64,8 @@ vt_stmt_source::xFilter(const fl::vtab::index_info& info, cursor* cursor)
 
     }
 
+  } else {
+    // TODO: error handling?
   }
 
   return result;

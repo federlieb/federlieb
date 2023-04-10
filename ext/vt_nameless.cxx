@@ -4,6 +4,9 @@
 
 namespace fl = ::federlieb;
 
+// TODO: add a hidden column encoding the actual column names
+// as a JSON array?
+
 void
 vt_nameless::xConnect(bool create)
 {
