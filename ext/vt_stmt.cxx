@@ -451,6 +451,21 @@ schema_has_table_named(fl::db db, std::string table_name) {
 
 int
 estimate_rows_by_table_name(fl::db db, std::string table_name) {
+  
+  if (!schema_has_table_named(db, "sqlite_stat1")) {
+    return -1;
+  }
+
+  // if there is an entry to table_name in sqlite_stat1
+  // where idx is null then the stat value is the row count
+
+  // otherwise, if there is an entry for table_name in
+  // sqlite_stat1 and the corresponding index is not a
+  // partial index, then the first number in the `stat`
+  // value is the row count.
+
+  // pragma_index_list.partial indicates partial indices.
+
   return 100;
 }
 
@@ -478,6 +493,22 @@ estimate_rows_by_index_name(fl::db db, std::string index_name) {
       std::string idx;
       std::string stat;
     };
+
+    // TODO: this does not find the right number if the `stat` value
+    // ends with `unordered` or other arguments.
+
+#if 0
+
+  boost::char_separator<char> separator("\t\r\n ");
+  boost::tokenizer<> tokens(s, separator);
+  for (auto&& token : tokens) {
+    auto xpos = token.find_first_not_of("0123456789");
+    if (xpos != token.end()) {
+      // contains non-digit
+    }
+  }
+
+#endif
 
     for (auto&& row : stat1_stmt | fl::as<sqlite_stat1>()) {
       auto pos = row.stat.find_last_not_of("0123456789");
@@ -625,8 +656,8 @@ vt_stmt::xFilter(const fl::vtab::index_info& info, cursor* cursor)
 
     auto user_stmt = db().prepare(
       fl::detail::format(
-        "select * from /* {} */ " + arguments().front(),
-        fl::detail::mangle_for_multiline_comment(table_name_)));
+        "select * from /* {} */ {}",
+        fl::detail::mangle_for_multiline_comment(table_name_), arguments().front()));
 
     user_stmt.execute(inputs);
 

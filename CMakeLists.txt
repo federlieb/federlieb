@@ -129,6 +129,7 @@ set(FEDERLIEB_EXT_SOURCES_LIST
   ext/vt_colormap.cxx
   ext/vt_bfs.cxx
   ext/vt_stmt_source.cxx
+  ext/vt_stat1.cxx
 
   ext/fx_toset.cxx
   ext/fx_kcrypto.cxx

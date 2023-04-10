@@ -135,7 +135,7 @@ format(const std::string& format, Ts... args)
       s << values.at(ix++);
       open = false;
     } else {
-      fl::error::raise("bad format string");
+      fl::error::raise(std::string("bad format string (") + format + std::string(")"));
     }
   }
 

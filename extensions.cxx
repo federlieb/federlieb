@@ -37,6 +37,7 @@ extern "C"
 #include "ext/vt_colormap.hxx"
 #include "ext/vt_bfs.hxx"
 #include "ext/vt_stmt_source.hxx"
+#include "ext/vt_stat1.hxx"
 
 extern "C"
 {
@@ -74,6 +75,7 @@ extern "C"
       vt_colormap::register_module(ours);
       vt_breadth_first_search::register_module(ours);
       vt_stmt_source::register_module(ours);
+      vt_stat1::register_module(ours);
 
       fx_toset::register_function(ours);
       fx_toset_agg::register_function(ours);
