@@ -1,7 +1,5 @@
 #pragma GCC diagnostic ignored "-Wconversion"
 
-#include <boost/graph/transitive_closure.hpp>
-
 #include "federlieb/federlieb.hxx"
 
 #include "vt_transitive_closure.hxx"

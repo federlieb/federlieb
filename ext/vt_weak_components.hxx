@@ -1,7 +1,6 @@
 #pragma once
-#include <boost/graph/connected_components.hpp>
 
-#include "federlieb/vtab.hxx"
+#include "federlieb/federlieb.hxx"
 #include "vt_bgl.hxx"
 
 namespace fl = ::federlieb;

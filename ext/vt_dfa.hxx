@@ -33,7 +33,7 @@ public:
 
   ref_counted_memory* memory_ = nullptr;
 
-  static inline std::array<std::pair<std::string, std::string>, 9> shadow_tables = {
+  static inline std::array<std::pair<std::string, std::string>, 11> shadow_tables = {
     std::make_pair("dfa", "fl_dfa_view"),
     std::make_pair("nfastate", "fl_dfa_view"),
     std::make_pair("dfastate", "fl_dfa_view"),
@@ -42,6 +42,8 @@ public:
     std::make_pair("via", "fl_dfa_view"),
     std::make_pair("nfatrans_via", "fl_dfa_view"),
     std::make_pair("dfatrans_via", "fl_dfa_view"),
+    std::make_pair("nfatrans_flat", "fl_dfa_view"),
+    std::make_pair("dfastate_nfa", "fl_dfa_view"),
     std::make_pair("dfastate_subset", "fl_dfastate_subset")
   };
 

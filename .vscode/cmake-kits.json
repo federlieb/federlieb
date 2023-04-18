@@ -7,9 +7,14 @@
       "C": "/usr/bin/gcc",
       "CXX": "/usr/bin/g++"
     },
+    "environmentVariables": {
+      "CMAKE_BUILD_PARALLEL_LEVEL": "2",
+      "CMAKE_CXX_COMPILER_LAUNCHER": "ccache"
+    },
     "cmakeSettings": {
       "CMAKE_MODULE_PATH": "/workspaces/federlieb/build/",
-      "CMAKE_BUILD_PARALLEL_LEVEL": 2
+      "CMAKE_BUILD_PARALLEL_LEVEL": 2,
+      "CMAKE_CXX_COMPILER_LAUNCHER": "ccache"
     }
   }
 ]

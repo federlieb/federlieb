@@ -1,5 +1,4 @@
 #pragma once
-#include <boost/graph/biconnected_components.hpp>
 
 #include "federlieb/vtab.hxx"
 #include "vt_bgl.hxx"

@@ -2,8 +2,7 @@
 
 #include <mutex>
 
-#include "federlieb/db.hxx"
-#include "federlieb/vtab.hxx"
+#include "federlieb/federlieb.hxx"
 
 namespace fl = ::federlieb;
 

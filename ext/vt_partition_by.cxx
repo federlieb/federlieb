@@ -7,6 +7,8 @@ namespace fl = ::federlieb;
 // xFilter does not materialize the result before it returns a range to it,
 // but SQLite might xFilter again in the meantime.
 
+// TODO: would be nice if this had a way to add CTE tables
+
 void
 vt_partition_by::xConnect(bool create)
 {

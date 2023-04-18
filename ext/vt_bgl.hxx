@@ -1,7 +1,18 @@
 #pragma once
 
 #include <boost/graph/adjacency_list.hpp>
+#include <boost/graph/biconnected_components.hpp>
+#include <boost/graph/breadth_first_search.hpp>
+#include <boost/graph/connected_components.hpp>
+#include <boost/graph/copy.hpp>
+#include <boost/graph/copy.hpp>
+#include <boost/graph/depth_first_search.hpp>
+#include <boost/graph/dijkstra_shortest_paths.hpp>
+#include <boost/graph/dominator_tree.hpp>
 #include <boost/graph/graph_traits.hpp>
+#include <boost/graph/strong_components.hpp>
+#include <boost/graph/transitive_closure.hpp>
+#include <boost/graph/visitors.hpp>
 #include <boost/property_map/property_map.hpp>
 
 #if 0

@@ -219,6 +219,7 @@ vt_dfa::cursor::cursor(vt_dfa* vtab) : tmpdb_(":memory:") {
 
   pragma synchronous = off;
   pragma journal_mode = off;
+  pragma analysis_limit = 1000;
 
   create table if not exists dfa(
     complete int not null default false,
@@ -246,21 +247,16 @@ vt_dfa::cursor::cursor(vt_dfa* vtab) : tmpdb_(":memory:") {
     id integer primary key,
     src int,
     via int,
-    dst int,
-    unique(src,via,dst),
-    unique(via,src,dst)
+    dst int
   );
-
-  create index if not exists idx_nfatrans_dst on nfatrans(dst);
-  create unique index if not exists idx_nfatrans_id on nfatrans(id);
 
   create view if not exists nfapipeline as select null as src, null as via, null as dst where false;
   create trigger if not exists nfapipeline instead of insert on nfapipeline
   begin
-    insert or ignore into nfastate(state) values(NEW.src);
+    -- insert or ignore into nfastate(state) values(NEW.src);
     insert or ignore into via(via)
       select NEW.via where NEW.via is not null;
-    insert or ignore into nfastate(state) values(NEW.dst);
+    -- insert or ignore into nfastate(state) values(NEW.dst);
     insert into nfatrans(src, via, dst)
     select
       (select id from nfastate where state is NEW.src),
@@ -310,6 +306,18 @@ vt_dfa::cursor::cursor(vt_dfa* vtab) : tmpdb_(":memory:") {
     nfatrans.src, via.via, nfatrans.dst
   from
     nfatrans inner join via on via.id = nfatrans.via
+  ;
+
+  create view nfatrans_flat as
+  select
+    src_state.state as src,
+    via.via,
+    dst_state.state as dst
+  from
+    nfatrans
+      inner join via on via.id = nfatrans.via
+      inner join nfastate src_state on src_state.id = nfatrans.src
+      inner join nfastate dst_state on dst_state.id = nfatrans.dst
   ;
 
   create view dfastate_nfa as
@@ -464,7 +472,7 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
 
   cursor->tmpdb_.prepare(R"SQL(
 
-    insert or ignore into nfastate(state)
+    insert into nfastate(state)
     select
       each.value
     from
@@ -474,8 +482,18 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
       each.value
     from
       json_each(?2) each
+    union
+    select
+      each.value->>'0'
+    from
+      json_each(?3) each
+    union
+    select
+      each.value->>'2'
+    from
+      json_each(?3) each
 
-  )SQL").execute(no_incoming, no_outgoing);
+  )SQL").execute(no_incoming, no_outgoing, nfa_transitions);
 
   cursor->tmpdb_.prepare(R"SQL(
 
@@ -491,7 +509,12 @@ vt_dfa::xFilter(const fl::vtab::index_info& info,
 
   cursor->tmpdb_.execute_script(R"SQL(
 
-    analyze /* vt_dfa xFilter (1) */;
+    create index if not exists idx_nfatrans_dst on nfatrans(dst);
+    create unique index if not exists idx_nfatrans_id on nfatrans(id);
+    create unique index if not exists idx_nfatrans_src_via_dst on nfatrans(src,via,dst);
+    create unique index if not exists idx_nfatrans_via_src_dst on nfatrans(via,src,dst);
+
+    analyze; /* vt_dfa xFilter (1) */;
 
   )SQL");
 

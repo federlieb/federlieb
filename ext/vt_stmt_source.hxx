@@ -1,9 +1,6 @@
 #pragma once
 
-#include <boost/json.hpp>
-
 #include "federlieb/vtab.hxx"
-#include "federlieb/json.hxx"
 
 namespace fl = ::federlieb;
 

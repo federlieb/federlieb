@@ -1,6 +1,6 @@
 #pragma once
 
-#include "federlieb/vtab.hxx"
+#include "federlieb/federlieb.hxx"
 
 #include "vt_bgl.hxx"
 

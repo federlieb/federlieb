@@ -1,9 +1,3 @@
-#include <boost/graph/dominator_tree.hpp>
-#include <boost/graph/copy.hpp>
-
-#include <boost/graph/depth_first_search.hpp>
-#include <boost/graph/visitors.hpp>
-
 #include "federlieb/federlieb.hxx"
 #include "vt_dominator_tree.hxx"
 

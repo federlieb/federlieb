@@ -1,10 +1,13 @@
-#include "vt_stmt.hxx"
-#include "federlieb/federlieb.hxx"
-
 #include <atomic>
 
 #include <boost/algorithm/string/join.hpp>
 #include <fmt/core.h>
+
+#include "vt_stmt.hxx"
+#include "vt_stat1.hxx"
+
+#include "federlieb/federlieb.hxx"
+
 
 namespace fl = ::federlieb;
 
@@ -179,6 +182,8 @@ vt_stmt::init_cache(fl::stmt& stmt)
 {
 
   auto db = fl::db(":memory:");
+
+  vt_stat1::register_module(db);
 
   fl::error::raise_if(stmt.column_count() < 1, "zero columns");
 
@@ -431,7 +436,7 @@ void vt_stmt::xRollbackTo(int savepoint) {
     fl::detail::quote_string(std::to_string(savepoint))));
 }
 
-bool
+static bool
 schema_has_index_named(fl::db db, std::string index_name) {
   return !db.prepare(R"SQL(
 
@@ -440,7 +445,7 @@ schema_has_index_named(fl::db db, std::string index_name) {
   )SQL" + fl::detail::quote_string(index_name)).execute().empty();
 }
 
-bool
+static bool
 schema_has_table_named(fl::db db, std::string table_name) {
   return !db.prepare(R"SQL(
 
@@ -449,7 +454,7 @@ schema_has_table_named(fl::db db, std::string table_name) {
   )SQL" + fl::detail::quote_string(table_name)).execute().empty();
 }
 
-int
+static int
 estimate_rows_by_table_name(fl::db db, std::string table_name) {
   
   if (!schema_has_table_named(db, "sqlite_stat1")) {
@@ -469,7 +474,7 @@ estimate_rows_by_table_name(fl::db db, std::string table_name) {
   return 100;
 }
 
-int
+static int
 estimate_rows_by_index_name(fl::db db, std::string index_name) {
 
   if (schema_has_table_named(db, "sqlite_stat1")) {
@@ -497,19 +502,6 @@ estimate_rows_by_index_name(fl::db db, std::string index_name) {
     // TODO: this does not find the right number if the `stat` value
     // ends with `unordered` or other arguments.
 
-#if 0
-
-  boost::char_separator<char> separator("\t\r\n ");
-  boost::tokenizer<> tokens(s, separator);
-  for (auto&& token : tokens) {
-    auto xpos = token.find_first_not_of("0123456789");
-    if (xpos != token.end()) {
-      // contains non-digit
-    }
-  }
-
-#endif
-
     for (auto&& row : stat1_stmt | fl::as<sqlite_stat1>()) {
       auto pos = row.stat.find_last_not_of("0123456789");
       if (row.idx == index_name && std::string::npos != pos) {
@@ -522,7 +514,7 @@ estimate_rows_by_index_name(fl::db db, std::string index_name) {
   return 100;
 }
 
-int
+static int
 estimate_rows_by_constraints(fl::db db, const fl::vtab::index_info& info) {
   return 1000;
 }

@@ -1,5 +1,3 @@
-#include <boost/graph/dijkstra_shortest_paths.hpp>
-
 #include "federlieb/federlieb.hxx"
 #include "vt_dijkstra_shortest_paths.hxx"
 

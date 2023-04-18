@@ -9,11 +9,11 @@ vt_stat1::xConnect(bool create)
 {
   declare(R"SQL(
       CREATE TABLE fl_stat1(
-        tbl TEXT,
-        idx TEXT,
+        tbl   TEXT,
+        idx   TEXT,
         seqno INT,
-        cnt INT,
-        arg TEXT
+        cnt   INT,
+        arg   TEXT
       )
     )SQL");
 }

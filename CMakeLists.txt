@@ -44,6 +44,7 @@ if(NOT CMAKE_BUILD_TYPE MATCHES RELEASE)
   add_compile_options(
       -Wno-unused-parameter
       -Wno-unused-variable
+      -Wno-unused-function
       -Wno-unused-but-set-variable
       -Wno-unused-but-set-parameter
     )
@@ -155,7 +156,7 @@ target_link_libraries (main
 if(CMAKE_BUILD_TYPE MATCHES RELEASE)
 
   if (CMAKE_COMPILER_IS_GNUCXX)
-    set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+    set(CMAKE_CXX_FLAGS_RELEASE "-O2")
   endif()
 
   set_property(
@@ -195,6 +196,12 @@ target_link_libraries (fl_extensions
 
 target_link_options(fl_extensions PRIVATE -static-libgcc -static-libstdc++)
 
-# set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=gold")
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=gold")
 
-# target_precompile_headers(main PRIVATE src/federlieb/federlieb.hxx)
+target_precompile_headers(federlieb_static PRIVATE src/federlieb/federlieb.hxx)
+target_precompile_headers(federlieb_static_ext PRIVATE src/federlieb/federlieb.hxx)
+target_precompile_headers(
+  fl_extensions
+  PRIVATE src/federlieb/federlieb.hxx
+  # PRIVATE ext/vt_bgl.hxx
+)

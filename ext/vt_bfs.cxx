@@ -1,8 +1,3 @@
-#include <boost/graph/copy.hpp>
-
-#include <boost/graph/breadth_first_search.hpp>
-#include <boost/graph/visitors.hpp>
-
 #include "federlieb/federlieb.hxx"
 #include "vt_bfs.hxx"
 
@@ -56,7 +51,7 @@ vt_breadth_first_search::xFilter(const fl::vtab::index_info& info, cursor* curso
   std::stack<size_t> q;
   boost::breadth_first_visit(
     cursor->g_.graph_,
-    cursor->g_[*root],
+    root_vertex,
     q,
     boost::make_bfs_visitor(std::make_pair(
         (boost::stamp_times(time_map, t, boost::on_discover_vertex()))
@@ -69,6 +64,11 @@ vt_breadth_first_search::xFilter(const fl::vtab::index_info& info, cursor* curso
   result_type result;
 
   for (auto v : boost::make_iterator_range(boost::vertices(cursor->g_.graph_))) {
+    
+    if (!time[v]) {
+      continue;
+    }
+
     result.push_back({
       *root,
       cursor->g_.variant(v),
